@@ -1,0 +1,7 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+*.zip
+test/e2e/node_modules/
+test/e2e/package-lock.json

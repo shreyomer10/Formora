@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Campus Hiring 2026 - Google Forms (mock)</title>
+  <style>
+    body { font-family: Roboto, system-ui, sans-serif; max-width: 640px; margin: 30px auto; }
+    [role=listitem] { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    [role=heading] { font-weight: 500; margin-bottom: 8px; }
+    [role=radio], [role=checkbox] { display: inline-block; width: 16px; height: 16px; border: 2px solid #5f6368; border-radius: 50%; vertical-align: middle; margin-right: 8px; }
+    [role=checkbox] { border-radius: 2px; }
+    [role=radio][aria-checked=true], [role=checkbox][aria-checked=true] { background: #673ab7; }
+    label { display: block; margin: 6px 0; }
+    input[type=text], textarea { width: 100%; padding: 6px; border: 0; border-bottom: 1px solid #999; }
+    [role=listbox] { border: 1px solid #999; padding: 8px; width: 200px; cursor: pointer; }
+    [role=listbox] [role=option] { display: none; }
+    [role=listbox].open [role=option] { display: block; padding: 4px; }
+    #popup { display: none; position: absolute; background: #fff; border: 1px solid #999; }
+    #popup.open { display: block; }
+    #popup [role=option] { padding: 6px 12px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <form action="https://docs.google.com/forms/d/e/FAKE/formResponse" method="POST">
+    <div role="list">
+      <div role="listitem">
+        <div role="heading" aria-level="3">Full Name <span>*</span></div>
+        <input type="text" name="entry.1001" aria-labelledby="i1" aria-required="true" />
+      </div>
+      <div role="listitem">
+        <div role="heading" aria-level="3">Email ID *</div>
+        <input type="text" name="entry.1002" aria-required="true" />
+      </div>
+      <div role="listitem">
+        <div role="heading" aria-level="3">Notice Period *</div>
+        <div role="radiogroup" aria-required="true">
+          <label><div role="radio" aria-checked="false" data-value="Immediate" tabindex="0"></div><span>Immediate</span></label>
+          <label><div role="radio" aria-checked="false" data-value="15 days" tabindex="0"></div><span>15 days</span></label>
+          <label><div role="radio" aria-checked="false" data-value="30 days" tabindex="0"></div><span>30 days</span></label>
+          <label><div role="radio" aria-checked="false" data-value="__other_option__" tabindex="0"></div><span>Other:</span> <input type="text" aria-label="Other response" name="entry.1003.other_option_response" /></label>
+        </div>
+      </div>
+      <div role="listitem">
+        <div role="heading" aria-level="3">Preferred locations</div>
+        <div role="group">
+          <label><div role="checkbox" aria-checked="false" data-answer-value="Bengaluru" aria-label="Bengaluru" tabindex="0"></div><span>Bengaluru</span></label>
+          <label><div role="checkbox" aria-checked="false" data-answer-value="Pune" aria-label="Pune" tabindex="0"></div><span>Pune</span></label>
+          <label><div role="checkbox" aria-checked="false" data-answer-value="Remote" aria-label="Remote" tabindex="0"></div><span>Remote</span></label>
+        </div>
+      </div>
+      <div role="listitem">
+        <div role="heading" aria-level="3">Highest degree</div>
+        <div role="listbox" aria-expanded="false" tabindex="0">
+          <div role="option" aria-selected="true" data-value="">Choose</div>
+          <div role="option" aria-selected="false" data-value="B.Tech">B.Tech</div>
+          <div role="option" aria-selected="false" data-value="M.Tech">M.Tech</div>
+          <div role="option" aria-selected="false" data-value="MCA">MCA</div>
+        </div>
+      </div>
+      <div role="listitem">
+        <div role="heading" aria-level="3">Why should we hire you?</div>
+        <div>Max 100 words</div>
+        <textarea name="entry.1005" aria-label="Your answer"></textarea>
+      </div>
+      <div role="listitem">
+        <div role="heading" aria-level="3">Rate your skills</div>
+        <div role="radiogroup" aria-label="Node.js">
+          <label><div role="radio" aria-checked="false" data-value="1" aria-label="1"></div></label>
+          <label><div role="radio" aria-checked="false" data-value="2" aria-label="2"></div></label>
+          <label><div role="radio" aria-checked="false" data-value="3" aria-label="3"></div></label>
+        </div>
+        <div role="radiogroup" aria-label="SQL">
+          <label><div role="radio" aria-checked="false" data-value="1" aria-label="1"></div></label>
+          <label><div role="radio" aria-checked="false" data-value="2" aria-label="2"></div></label>
+          <label><div role="radio" aria-checked="false" data-value="3" aria-label="3"></div></label>
+        </div>
+      </div>
+    </div>
+    <div id="popup"></div>
+  </form>
+  <script>
+    // Mimic Google's behaviour: clicking a radio/checkbox toggles aria-checked; the listbox opens a popup copy of its options.
+    document.querySelectorAll('[role=radio]').forEach((r) => r.addEventListener('click', () => {
+      r.closest('[role=radiogroup]').querySelectorAll('[role=radio]').forEach((x) => x.setAttribute('aria-checked', 'false'));
+      r.setAttribute('aria-checked', 'true');
+    }));
+    document.querySelectorAll('[role=checkbox]').forEach((c) => c.addEventListener('click', () => c.setAttribute('aria-checked', c.getAttribute('aria-checked') === 'true' ? 'false' : 'true')));
+    const lb = document.querySelector('[role=listbox]');
+    const popup = document.getElementById('popup');
+    lb.addEventListener('click', () => {
+      popup.innerHTML = '';
+      lb.querySelectorAll('[role=option]').forEach((o) => {
+        const c = document.createElement('div'); c.setAttribute('role', 'option'); c.dataset.value = o.dataset.value; c.textContent = o.textContent;
+        c.addEventListener('click', (e) => { e.stopPropagation(); lb.querySelectorAll('[role=option]').forEach((x) => x.setAttribute('aria-selected', x.dataset.value === c.dataset.value ? 'true' : 'false')); popup.classList.remove('open'); });
+        popup.appendChild(c);
+      });
+      popup.classList.add('open');
+    });
+  </script>
+</body>
+</html>

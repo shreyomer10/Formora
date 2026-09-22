@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ApplyPilot settings</title>
+  <style>
+    body { max-width: 860px; margin: 24px auto; padding: 0 16px; font-family: system-ui, sans-serif; font-size: 14px; color: #111; }
+    h1 { color: #7c3aed; }
+    h2 { font-size: 16px; margin: 28px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px 16px; }
+    label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #444; }
+    input, select, textarea { padding: 7px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; font-family: inherit; }
+    textarea { min-height: 90px; resize: vertical; }
+    .full { grid-column: 1 / -1; }
+    button { padding: 8px 14px; border-radius: 8px; border: 1px solid #ddd; background: #fafafa; cursor: pointer; font-size: 13px; }
+    button.primary { background: #7c3aed; color: #fff; border-color: #7c3aed; font-weight: 600; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+    .msg { color: #4c1d95; font-size: 13px; }
+    .muted { color: #777; font-size: 12px; }
+    .bar { position: sticky; bottom: 0; background: #fff; padding: 12px 0; border-top: 1px solid #eee; margin-top: 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    td, th { text-align: left; padding: 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+    td button { padding: 2px 8px; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <h1>ApplyPilot settings</h1>
+  <p class="muted">Everything here stays in your browser's extension storage. The only outbound call is to the Gemini API with your own key.</p>
+
+  <h2>1. Gemini API</h2>
+  <div class="grid">
+    <label class="full">API key <input id="apiKey" type="password" placeholder="AIza..." autocomplete="off" /></label>
+    <label>Model (pick one or type any Gemini model id)
+      <input id="model" list="modelList" placeholder="gemini-3.8-flash" />
+      <datalist id="modelList">
+        <option value="gemini-3.8-flash">default, best answers</option>
+        <option value="gemini-3.5-flash-lite">cheaper, faster</option>
+        <option value="gemini-3.1-pro-preview">preview</option>
+      </datalist>
+    </label>
+    <label>Thinking level
+      <select id="effort">
+        <option value="low">low</option>
+        <option value="medium" selected>medium</option>
+        <option value="high">high</option>
+      </select>
+    </label>
+    <label><input id="overwrite" type="checkbox" style="width:auto" /> Overwrite fields that already have a value</label>
+  </div>
+  <div class="row"><button id="testKey">Test key</button><span id="keyMsg" class="msg"></span></div>
+
+  <h2>2. Resume</h2>
+  <div class="row">
+    <input id="resumeFile" type="file" accept=".pdf,.doc,.docx" />
+    <button id="extract" class="primary">Extract profile + text from PDF with AI</button>
+    <span id="resumeMsg" class="msg"></span>
+  </div>
+  <p class="muted" id="resumeInfo">No resume stored.</p>
+  <label>Resume text (used as context for answers; auto-filled by the extract button, or paste it)
+    <textarea id="resumeText" style="min-height:160px"></textarea>
+  </label>
+
+  <h2>3. Profile</h2>
+  <div class="grid" id="profileGrid">
+    <label>First name <input data-k="firstName" /></label>
+    <label>Last name <input data-k="lastName" /></label>
+    <label>Full name (optional override) <input data-k="fullName" /></label>
+    <label>Email <input data-k="email" type="email" /></label>
+    <label>Phone <input data-k="phone" placeholder="+91 98765 43210" /></label>
+    <label>Phone country code <input data-k="phoneCountryCode" placeholder="+91" /></label>
+    <label>Date of birth <input data-k="dob" type="date" /></label>
+    <label>Gender <input data-k="gender" /></label>
+    <label>Nationality <input data-k="nationality" /></label>
+    <label>Address <input data-k="address" /></label>
+    <label>City <input data-k="city" /></label>
+    <label>State <input data-k="state" /></label>
+    <label>Country <input data-k="country" /></label>
+    <label>PIN / ZIP <input data-k="pincode" /></label>
+    <label>LinkedIn URL <input data-k="linkedin" /></label>
+    <label>GitHub URL <input data-k="github" /></label>
+    <label>Portfolio / website <input data-k="portfolio" /></label>
+    <label>LeetCode / coding profile <input data-k="leetcode" /></label>
+    <label>Current company <input data-k="currentCompany" /></label>
+    <label>Current title <input data-k="currentTitle" /></label>
+    <label>Total experience (years) <input data-k="totalExperienceYears" placeholder="2.5" /></label>
+    <label>Current CTC <input data-k="currentCtc" placeholder="8 LPA" /></label>
+    <label>Expected CTC <input data-k="expectedCtc" placeholder="12 LPA" /></label>
+    <label>Notice period <input data-k="noticePeriod" placeholder="30 days / Immediate" /></label>
+    <label>College <input data-k="college" /></label>
+    <label>Degree <input data-k="degree" placeholder="B.Tech" /></label>
+    <label>Branch / major <input data-k="branch" /></label>
+    <label>Graduation year <input data-k="graduationYear" /></label>
+    <label>CGPA / percentage <input data-k="cgpa" /></label>
+    <label class="full">Skills (comma separated) <input data-k="skills" /></label>
+    <label class="full">Other facts the model should know (work authorisation, relocation, preferred locations, remote preference, languages, anything you get asked repeatedly)
+      <textarea data-k="facts" placeholder="Willing to relocate anywhere in India. Open to remote. Indian citizen, no visa sponsorship needed in India. Comfortable with night shifts: no."></textarea>
+    </label>
+  </div>
+
+  <h2>4. Answer style</h2>
+  <label>Custom instructions for generated answers (tone, length, things to emphasise or avoid)
+    <textarea id="customInstructions" placeholder="Keep answers under 80 words. Emphasise backend and system design experience. Never mention salary in free-text answers."></textarea>
+  </label>
+
+  <h2>5. Answer memory</h2>
+  <p class="muted">Answers the model generated and you applied. Reused verbatim for identical non-job-specific questions, and shown to the model as hints otherwise.</p>
+  <table id="memoryTable"><thead><tr><th>Question</th><th>Answer</th><th></th></tr></thead><tbody></tbody></table>
+  <div class="row"><button id="clearMemory">Clear all memory</button><span id="stats" class="muted"></span></div>
+
+  <div class="bar row"><button id="save" class="primary">Save everything</button><span id="saveMsg" class="msg"></span></div>
+  <script src="options.js"></script>
+</body>
+</html>

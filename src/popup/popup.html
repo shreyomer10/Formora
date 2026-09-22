@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { width: 260px; margin: 0; padding: 12px; font-family: system-ui, sans-serif; font-size: 13px; color: #111; }
+    h1 { font-size: 15px; margin: 0 0 10px; color: #7c3aed; }
+    button { width: 100%; padding: 9px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #ddd; background: #fafafa; cursor: pointer; font-size: 13px; }
+    button.primary { background: #7c3aed; color: #fff; border-color: #7c3aed; font-weight: 600; }
+    #status { min-height: 18px; color: #555; font-size: 12px; }
+    a { color: #7c3aed; }
+    .hint { color: #777; font-size: 11px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h1>ApplyPilot</h1>
+  <button id="fill" class="primary">Fill this page</button>
+  <button id="scan">Scan only (show questions)</button>
+  <button id="options">Profile, resume &amp; API key</button>
+  <div id="status"></div>
+  <div class="hint">Shortcut: Alt+Shift+F. Nothing is ever submitted for you.</div>
+  <script src="popup.js"></script>
+</body>
+</html>
