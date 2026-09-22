@@ -14,18 +14,18 @@ window.JAF.RULES = [
   // Contact
   { key: 'email',     test: /\b(e-?mail)\b/, types: ['text', 'email'] },
   { key: 'phone',     test: /\b(phone|mobile|contact (no|number)|cell|whatsapp|tel)\b/, types: ['text', 'tel', 'number'] },
-  { key: 'phoneCountryCode', test: /\b(country code|dial code|phone code)\b/, types: ['text', 'tel'] },
+  { key: 'phoneCountryCode', test: /\b(country code|dial code|phone code)\b/, types: ['text', 'tel', 'select', 'combobox'] },
 
   // Personal
   { key: 'dob',       test: /\b(date of birth|dob|birth ?date|birthday)\b/, types: ['text', 'date'] },
-  { key: 'gender',    test: /\b(gender|sex)\b/, types: ['text', 'select', 'radio'] },
-  { key: 'nationality', test: /\b(nationality|citizenship)\b/, types: ['text', 'select'] },
+  { key: 'gender',    test: /\b(gender|sex)\b/, types: ['text', 'select', 'radio', 'combobox'] },
+  { key: 'nationality', test: /\b(nationality|citizenship)\b/, types: ['text', 'select', 'combobox'] },
 
   // Location
   { key: 'address',   test: /\b(street|address line|full address|permanent address|current address)\b|^address\b/, types: ['text', 'textarea'] },
-  { key: 'city',      test: /\b(city|town|current location|location \(city\)|where are you (based|located))\b/, types: ['text'] },
-  { key: 'state',     test: /\b(state|province)\b/, types: ['text'] },
-  { key: 'country',   test: /\b(country)\b/, types: ['text', 'select'] },
+  { key: 'city',      test: /\b(city|town|current location|location \(city\)|where are you (based|located))\b/, types: ['text', 'select', 'combobox'] },
+  { key: 'state',     test: /\b(state|province)\b/, types: ['text', 'select', 'combobox'] },
+  { key: 'country',   test: /\b(country)\b/, types: ['text', 'select', 'combobox'] },
   { key: 'pincode',   test: /\b(pin ?code|zip ?code|postal ?code|postcode|zip)\b/, types: ['text', 'number'] },
 
   // Links
@@ -37,17 +37,17 @@ window.JAF.RULES = [
   // Work
   { key: 'currentCompany', test: /\b(current (company|employer|organi[sz]ation)|employer|company name|most recent (company|employer)|where do you (currently )?work)\b/, types: ['text'] },
   { key: 'currentTitle',   test: /\b(current (title|role|position|designation)|job title|designation|current job)\b/, types: ['text'] },
-  { key: 'totalExperienceYears', test: /\b(years? of (work |total |professional |relevant )?experience|total experience|experience \(?in years|work experience|yrs? of exp|how many years)\b/, types: ['text', 'number', 'select'] },
+  { key: 'totalExperienceYears', test: /\b(years? of (work |total |professional |relevant )?experience|total experience|experience \(?in years|work experience|yrs? of exp|how many years)\b/, types: ['text', 'number', 'select', 'combobox', 'radio'] },
   { key: 'currentCtc',     test: /\b(current (ctc|salary|compensation|pay|package)|present (ctc|salary)|ctc \(current)\b/, types: ['text', 'number'] },
   { key: 'expectedCtc',    test: /\b(expected (ctc|salary|compensation|pay|package)|salary expectation|desired (salary|compensation|pay)|ctc \(expected)\b/, types: ['text', 'number'] },
-  { key: 'noticePeriod',   test: /\b(notice period|how soon can you (join|start)|earliest (joining|start) date|availability to (join|start)|joining time|when can you (join|start))\b/, types: ['text', 'number', 'select', 'radio'] },
+  { key: 'noticePeriod',   test: /\b(notice period|how soon can you (join|start)|earliest (joining|start) date|availability to (join|start)|joining time|when can you (join|start))\b/, types: ['text', 'number', 'select', 'radio', 'combobox'] },
   { key: 'skills',         test: /\b(skills?|technologies|tech stack|key skills|core competenc)\b/, types: ['text', 'textarea'] },
 
   // Education
-  { key: 'college',        test: /\b(college|university|institute|school name|institution|alma mater)\b/, types: ['text'] },
-  { key: 'degree',         test: /\b(degree|qualification|highest education|education level)\b/, types: ['text', 'select'] },
-  { key: 'branch',         test: /\b(branch|major|specialization|specialisation|field of study|stream|discipline)\b/, types: ['text'] },
-  { key: 'graduationYear', test: /\b(graduation year|year of (graduation|passing|completion)|passing year|batch|graduating in)\b/, types: ['text', 'number', 'select'] },
+  { key: 'college',        test: /\b(college|university|institute|school name|institution|alma mater)\b/, types: ['text', 'combobox'] },
+  { key: 'degree',         test: /\b(degree|qualification|highest education|education level)\b/, types: ['text', 'select', 'combobox', 'radio'] },
+  { key: 'branch',         test: /\b(branch|major|specialization|specialisation|field of study|stream|discipline)\b/, types: ['text', 'select', 'combobox'] },
+  { key: 'graduationYear', test: /\b(graduation year|year of (graduation|passing|completion)|passing year|batch|graduating in)\b/, types: ['text', 'number', 'select', 'combobox'] },
   { key: 'cgpa',           test: /\b(cgpa|gpa|percentage|aggregate|marks)\b/, types: ['text', 'number'] },
 
   // Resume

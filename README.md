@@ -6,11 +6,12 @@ It reads every question on the page, fills the factual ones from your stored pro
 
 ## How it works
 
-1. **Extract** (no LLM): a DOM walker collects native inputs, ARIA widgets (`role=radio|checkbox|listbox|combobox|textbox`), open shadow roots and Google Forms' `role=listitem` blocks, resolves a label for each and groups radios/checkboxes into one question with options.
+1. **Extract** (no LLM): a DOM walker collects native inputs, ARIA widgets (`role=radio|checkbox|listbox|combobox|textbox`, `aria-haspopup=listbox` buttons), custom-styled radios/checkboxes whose native input is hidden behind a label, open shadow roots and Google Forms' `role=listitem` blocks, resolves a label for each and groups radios/checkboxes into one question with options. Dropdowns that only render their options when opened (react-select, Workday, country pickers) are opened once, their options read, and closed again, so the real option list is known before anything is chosen.
 2. **Deterministic fill**: regex rules in `src/lib/rules.js` map labels like "notice period" or "LinkedIn" to profile keys. Resume file inputs get your stored PDF.
 3. **Memory**: an identical, non-job-specific question you already answered is reused verbatim.
 4. **One LLM call**: everything left goes to Gemini with your profile, resume text, page context and previous answers. The model returns strict JSON (option values are validated against the real options before anything is clicked).
-5. **Review panel**: shows what was filled and by what, lets you edit and re-apply AI answers, then you submit.
+5. **Apply and verify**: every radio, checkbox and dropdown choice is checked after clicking (native `checked`, `aria-checked`, or the text the dropdown now shows). If the page ignored the click, the item is reported as failed instead of pretending it worked.
+6. **Review panel**: shows what was filled and by what. Radio/select questions get a dropdown of the real options, checkbox questions a tick list, everything else a text box; edit and re-apply, then you submit.
 
 ## Install (unpacked)
 
@@ -31,6 +32,14 @@ npm run test:headful
 ```
 
 Needs Chrome installed (set `CHROME_PATH` if it is not in the default location). The test seeds a fake profile and does not call the API, so it covers extraction, deterministic fill, memory reuse, resume attach and the Google Forms adapter.
+
+## Is the API key safe?
+
+- The key is stored in `chrome.storage.local`, which lives unencrypted inside your Chrome profile on disk. Anyone who can read your Chrome profile folder (other users of the same Windows account, malware running as you) can read it. Treat it like a saved password.
+- Web pages never see it. Only the service worker reads the key and makes API calls; the content script that runs on job sites only learns whether a key exists. Content scripts run in an isolated world, so page JavaScript cannot read their variables anyway.
+- The only network destination is `generativelanguage.googleapis.com` (the manifest's `host_permissions` allow nothing else). Every request is sent with `store: false`, so Google does not keep the interaction for later retrieval.
+- Your resume, profile and the page's questions are sent to Google with each fill. On the free tier Google may use API inputs to improve its products; on a billed project it does not. Check the current Gemini API terms if that matters to you.
+- Harden the key in Google AI Studio / Cloud Console: restrict it to the Generative Language API only, set a daily quota, and rotate it if you ever paste it somewhere by mistake. Never commit it; nothing in this repo stores it in a file.
 
 ## Notes
 

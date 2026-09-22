@@ -1,5 +1,7 @@
 // Writes values back into the page. Framework-safe: uses the native value setter
 // so React/Vue/Angular state pick the change up, then dispatches the events they listen for.
+// Every choice (radio, checkbox, dropdown option) is verified after clicking; a fill only
+// reports ok when the page actually shows the new state.
 (function () {
   const JAF = window.JAF;
 
@@ -10,6 +12,40 @@
         : new Event(n, { bubbles: true, cancelable: true });
       el.dispatchEvent(ev);
     }
+  }
+
+  function mouseInit(el, extra = {}) {
+    const r = el.getBoundingClientRect();
+    return {
+      bubbles: true, cancelable: true, composed: true, view: window, button: 0, buttons: 1,
+      clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, ...extra,
+    };
+  }
+
+  // Full pointer + mouse sequence with real MouseEvent objects. ARIA widgets (Google
+  // Forms, react-select, Workday) listen on different events of this sequence.
+  function realClick(el) {
+    const init = mouseInit(el);
+    const P = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+    const pinit = { ...init, pointerId: 1, pointerType: 'mouse', isPrimary: true };
+    el.dispatchEvent(new P('pointerdown', pinit));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new P('pointerup', pinit));
+    el.dispatchEvent(new MouseEvent('mouseup', init));
+    el.dispatchEvent(new MouseEvent('click', init));
+  }
+
+  function key(el, keyName, code, keyCode) {
+    const init = { key: keyName, code, keyCode, which: keyCode, bubbles: true, cancelable: true, composed: true };
+    el.dispatchEvent(new KeyboardEvent('keydown', init));
+    el.dispatchEvent(new KeyboardEvent('keyup', init));
+  }
+
+  function click(el) {
+    try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch { /* detached */ }
+    try { el.focus({ preventScroll: true }); } catch { /* not focusable */ }
+    if (el.tagName === 'INPUT') el.click(); // native inputs toggle on click(); avoid a second synthetic click
+    else realClick(el);
   }
 
   JAF.setNativeValue = function (el, value) {
@@ -24,6 +60,15 @@
     el.blur();
     fire(el, ['blur', 'focusout']);
   };
+
+  // Like setNativeValue but keeps focus: comboboxes close their menu on blur.
+  function typeInto(el, value) {
+    el.focus();
+    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (desc && desc.set) desc.set.call(el, value); else el.value = value;
+    fire(el, ['input', 'keyup']);
+  }
 
   function setEditable(el, value) {
     el.focus();
@@ -49,38 +94,204 @@
     return `${d}/${mo}/${y}`;
   }
 
-  function click(el) {
-    el.scrollIntoView({ block: 'center', inline: 'nearest' });
-    el.focus();
-    fire(el, ['mousedown', 'mouseup']);
-    el.click();
+  // ---- radios / checkboxes -------------------------------------------------
+  function isOn(el) {
+    if (el.tagName === 'INPUT') return !!el.checked;
+    return el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true';
   }
 
-  async function fillCombobox(el, value) {
-    JAF.setNativeValue(el, '');
-    el.focus();
-    // type the value so async option lists populate
-    JAF.setNativeValue(el, value);
-    el.focus();
-    await JAF.sleep(500);
-    const root = el.getRootNode();
+  function labelFor(el) {
+    if (el.labels && el.labels.length) return el.labels[0];
+    const wrap = el.closest && el.closest('label');
+    if (wrap) return wrap;
+    if (el.id) {
+      const root = el.getRootNode();
+      const l = (root.querySelector ? root : document).querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (l) return l;
+    }
+    return null;
+  }
+
+  // Returns true when the control ends up in the wanted state. Tries the input itself,
+  // then its label (custom-styled inputs are hidden behind the label), then the keyboard.
+  async function setChoice(el, on) {
+    if (isOn(el) === on) return true;
+    const native = el.tagName === 'INPUT';
+    const attempts = native
+      ? [
+          () => click(el),
+          () => { const l = labelFor(el); if (l) realClick(l); },
+          () => { el.checked = on; fire(el, ['input', 'change']); },
+        ]
+      : [
+          () => click(el),
+          () => { const l = labelFor(el) || el.parentElement; if (l) realClick(l); },
+          () => { el.focus(); key(el, ' ', 'Space', 32); },
+          () => { el.focus(); key(el, 'Enter', 'Enter', 13); },
+        ];
+    for (const attempt of attempts) {
+      try { attempt(); } catch { /* try the next strategy */ }
+      await JAF.sleep(60);
+      if (isOn(el) === on) return true;
+    }
+    return isOn(el) === on;
+  }
+
+  // ---- dropdowns -----------------------------------------------------------
+  const OPTION_SEL = '[role="option"], [role="menuitem"], [role="menuitemradio"], [role="listbox"] li, [role="listbox"] > div';
+  const PLACEHOLDER_RE = /^(select|choose|please select|no options|no results|nothing found|loading|searching|type to search|--+|-)/i;
+
+  function inOverlay(el) {
+    return !!JAF.closestAcrossShadow(el, '#applypilot-root');
+  }
+
+  function isTypable(el) {
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.getAttribute('role') === 'textbox';
+  }
+
+  // Option elements currently visible for this control: its aria-controls/aria-owns
+  // listbox first, otherwise any visible option on the page (popups render in portals).
+  function visibleOptionEls(el) {
     let opts = [];
+    const root = el.getRootNode();
     const ctl = el.getAttribute('aria-controls') || el.getAttribute('aria-owns');
     if (ctl) {
       ctl.split(/\s+/).forEach((id) => {
-        const lb = root.getElementById ? root.getElementById(id) : document.getElementById(id);
-        if (lb) opts = opts.concat(Array.from(lb.querySelectorAll('[role="option"], li')));
+        const lb = (root.getElementById ? root.getElementById(id) : null) || document.getElementById(id);
+        if (lb) opts = opts.concat(Array.from(lb.querySelectorAll('[role="option"], li, [role="menuitem"]')));
       });
     }
-    if (!opts.length) opts = JAF.deepQueryAll('[role="option"], [role="listbox"] li, .select__option, [class*="option" i]').filter(JAF.isVisible);
-    const options = opts.map((o) => ({ label: JAF.text(o), value: JAF.text(o), el: o })).filter((o) => o.label);
-    const best = JAF.bestOption(value, options);
-    if (best) { click(best.el); return { ok: true, note: `picked "${best.label}"` }; }
-    // fall back to keyboard: ArrowDown + Enter selects the first suggestion in most libraries
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, bubbles: true }));
-    await JAF.sleep(100);
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-    return { ok: true, note: 'typed value; verify the selection' };
+    if (!opts.length) opts = JAF.deepQueryAll(OPTION_SEL);
+    return opts.filter((o) => JAF.isVisible(o) && !inOverlay(o));
+  }
+
+  function toOptions(els) {
+    const seen = new Set();
+    const out = [];
+    for (const el of els) {
+      const label = (JAF.text(el) || el.getAttribute('aria-label') || '').trim();
+      if (!label || label.length > 200 || seen.has(label) || PLACEHOLDER_RE.test(label)) continue;
+      seen.add(label);
+      out.push({ label, value: el.getAttribute('data-value') || label, el });
+    }
+    return out;
+  }
+
+  function openDropdown(el) {
+    try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch { /* detached */ }
+    if (isTypable(el)) {
+      el.focus();
+      realClick(el);
+      key(el, 'ArrowDown', 'ArrowDown', 40);
+    } else {
+      realClick(el);
+    }
+  }
+
+  // Close without pressing Escape (Escape can also close the modal the form lives in).
+  async function closeDropdown(el, beforeSet) {
+    if (isTypable(el)) {
+      el.blur();
+      fire(el, ['blur', 'focusout']);
+    } else {
+      const stillOpen = visibleOptionEls(el).some((o) => !beforeSet.has(o));
+      if (stillOpen) realClick(el); // toggle buttons close on a second click
+    }
+    await JAF.sleep(80);
+  }
+
+  // Open every combobox that has no options in the DOM, read what the popup shows, close it.
+  // Fills q.options and the registry entry so rules and the model can pick a real option.
+  JAF.discoverOptions = async function (questions) {
+    let found = 0;
+    for (const q of questions) {
+      if (q.type !== 'combobox' || (q.options && q.options.length) || q.currentValue) continue;
+      const entry = JAF.registry.get(q.id);
+      if (!entry || entry.kind !== 'single' || !entry.el.isConnected) continue;
+      const el = entry.el;
+      try {
+        const before = new Set(visibleOptionEls(el));
+        openDropdown(el);
+        await JAF.sleep(350);
+        const appeared = visibleOptionEls(el).filter((o) => !before.has(o));
+        const opts = toOptions(appeared.length ? appeared : visibleOptionEls(el));
+        await closeDropdown(el, before);
+        if (opts.length) {
+          // Popup nodes are usually unmounted on close: keep labels only, re-find on fill.
+          entry.options = opts.map((o) => ({ label: o.label, value: o.value }));
+          entry.discovered = true;
+          q.options = opts.slice(0, 300).map((o) => o.label);
+          if (opts.length > 300) q.meta = { ...(q.meta || {}), optionsPartial: true };
+          found++;
+        }
+      } catch (e) {
+        JAF.log('option discovery failed for', q.label, e);
+      }
+    }
+    return found;
+  };
+
+  function displayedText(el) {
+    const own = isTypable(el) ? el.value : JAF.text(el);
+    const box = el.closest('[role="combobox"], [class*="select" i], [class*="control" i], [class*="combobox" i], [class*="dropdown" i]');
+    const around = box ? JAF.text(box.parentElement || box) : JAF.text(el.parentElement);
+    return `${own || ''} ${around || ''}`;
+  }
+
+  async function pickVisible(el, target) {
+    const pick = JAF.bestOption(target, toOptions(visibleOptionEls(el)));
+    if (!pick) return null;
+    click(pick.el);
+    await JAF.sleep(200);
+    return pick;
+  }
+
+  // Select `value` in any dropdown-like control: react-select style inputs, Workday
+  // buttons, ARIA comboboxes, plain typeahead inputs.
+  async function fillDropdown(entry, el, value) {
+    const typable = isTypable(el);
+    const known = entry.options && entry.options.length ? (JAF.bestOption(value, entry.options) || JAF.rangeOption(value, entry.options)) : null;
+    const target = known ? known.label : String(value);
+
+    openDropdown(el);
+    await JAF.sleep(300);
+    let pick = await pickVisible(el, target);
+
+    if (!pick && typable) {
+      // Type to filter (also triggers async option loading), then look again.
+      typeInto(el, target);
+      await JAF.sleep(500);
+      pick = await pickVisible(el, target);
+      if (!pick) {
+        const shorter = target.split(/[\s(,/]+/)[0];
+        if (shorter && shorter.length >= 2 && shorter !== target) {
+          typeInto(el, shorter);
+          await JAF.sleep(500);
+          pick = await pickVisible(el, target);
+        }
+      }
+    }
+
+    if (pick) {
+      const shown = displayedText(el);
+      const verified = JAF.fuzzyEq(shown, pick.label) || shown.toLowerCase().includes(pick.label.toLowerCase().slice(0, 12));
+      if (!typable || verified) { el.blur(); return { ok: true, note: `picked "${pick.label}"` }; }
+      return { ok: true, note: `picked "${pick.label}" (could not confirm the field shows it, please verify)` };
+    }
+
+    if (typable) {
+      // Last resort for typeahead fields: keep the typed text and accept the first suggestion.
+      if (!el.value) typeInto(el, target);
+      key(el, 'ArrowDown', 'ArrowDown', 40);
+      await JAF.sleep(100);
+      key(el, 'Enter', 'Enter', 13);
+      await JAF.sleep(150);
+      const shown = displayedText(el);
+      if (JAF.fuzzyEq(shown, target)) return { ok: true, note: `typed "${target}"` };
+      return { ok: false, note: `typed "${target}" but no dropdown option matched; pick it manually` };
+    }
+    await closeDropdown(el, new Set());
+    return { ok: false, note: `no option matched "${target}"` };
   }
 
   async function fillGFormsListbox(entry, value) {
@@ -92,8 +303,11 @@
     const popup = JAF.deepQueryAll(`[role="option"][data-value="${CSS.escape(best.value)}"]`).filter(JAF.isVisible);
     const target = popup.find((o) => !entry.el.contains(o)) || popup[0] || best.el;
     click(target);
-    await JAF.sleep(150);
-    return { ok: true, note: `picked "${best.label}"` };
+    await JAF.sleep(200);
+    const sel = entry.el.querySelector('[role="option"][aria-selected="true"]');
+    const selLabel = sel ? (sel.getAttribute('aria-label') || sel.getAttribute('data-value') || JAF.text(sel)) : '';
+    if (sel && JAF.fuzzyEq(selLabel, best.label)) return { ok: true, note: `picked "${best.label}"` };
+    return { ok: false, note: `clicked "${best.label}" but the list did not change; pick it manually` };
   }
 
   async function fillFile(el, resume) {
@@ -113,15 +327,19 @@
     return { ok: true, note: file.name };
   }
 
-  function setChoice(el, on) {
-    const isAria = el.tagName !== 'INPUT';
-    const cur = isAria ? el.getAttribute('aria-checked') === 'true' : el.checked;
-    if (cur === on) return;
-    click(el);
-    if (!isAria && el.checked !== on) {
-      el.checked = on;
-      fire(el, ['input', 'change']);
+  // Map wanted strings onto group options. A comma-joined answer ("Go, Docker") is
+  // split when it does not match a single option itself.
+  function matchGroup(wanted, options) {
+    const chosen = [];
+    for (const w of wanted) {
+      const direct = JAF.bestOption(w, options);
+      if (direct) { if (!chosen.includes(direct)) chosen.push(direct); continue; }
+      for (const part of String(w).split(/\s*[,;|\n]\s*/)) {
+        const hit = part && JAF.bestOption(part, options);
+        if (hit && !chosen.includes(hit)) chosen.push(hit);
+      }
     }
+    return chosen;
   }
 
   // value: string, or array of strings for checkbox groups.
@@ -132,22 +350,28 @@
 
     try {
       if (entry.kind === 'group') {
-        const wanted = Array.isArray(value) ? value : [value];
-        const chosen = wanted.map((v) => JAF.bestOption(v, entry.options)).filter(Boolean);
+        const wanted = (Array.isArray(value) ? value : [value]).map((v) => String(v ?? '')).filter(Boolean);
+        const chosen = matchGroup(wanted, entry.options);
         if (!chosen.length) return { ok: false, note: `no option matched "${wanted.join(', ')}"` };
         if (q.type === 'radio') {
           const c = chosen[0];
-          setChoice(c.el, true);
-          if (c.isOther && c.otherInput) JAF.setNativeValue(c.otherInput, Array.isArray(value) ? value[0] : value);
+          const ok = await setChoice(c.el, true);
+          if (!ok) return { ok: false, note: `could not select "${c.label}" (page ignored the click); select it manually` };
+          if (c.isOther && c.otherInput) JAF.setNativeValue(c.otherInput, wanted[0]);
           return { ok: true, note: `selected "${c.label}"` };
         }
+        const failed = [];
         for (const o of entry.options) {
           const on = chosen.includes(o);
-          setChoice(o.el, on);
+          const ok = await setChoice(o.el, on);
+          if (!ok && on) failed.push(o.label);
           if (on && o.isOther && o.otherInput) JAF.setNativeValue(o.otherInput, wanted.find((w) => !entry.options.some((x) => JAF.fuzzyEq(w, x.label))) || '');
           await JAF.sleep(30);
         }
-        return { ok: true, note: `checked ${chosen.map((c) => `"${c.label}"`).join(', ')}` };
+        const done = chosen.filter((c) => !failed.includes(c.label)).map((c) => `"${c.label}"`).join(', ');
+        if (failed.length && failed.length === chosen.length) return { ok: false, note: `could not tick ${failed.map((f) => `"${f}"`).join(', ')}; tick manually` };
+        if (failed.length) return { ok: true, note: `checked ${done}; could not tick ${failed.map((f) => `"${f}"`).join(', ')}` };
+        return { ok: true, note: `checked ${done}` };
       }
 
       if (entry.kind === 'gforms-listbox') return await fillGFormsListbox(entry, value);
@@ -161,24 +385,27 @@
         case 'multiselect': {
           if (el.tagName === 'SELECT') {
             const vals = Array.isArray(value) ? value : [value];
-            const picks = vals.map((x) => JAF.bestOption(x, entry.options)).filter(Boolean);
+            const picks = vals.map((x) => JAF.bestOption(x, entry.options) || JAF.rangeOption(x, entry.options)).filter(Boolean);
             if (!picks.length) return { ok: false, note: `no option matched "${v}"` };
             if (el.multiple) {
               Array.from(el.options).forEach((o) => (o.selected = picks.some((p) => p.el === o)));
               fire(el, ['input', 'change']);
             } else {
               JAF.setNativeValue(el, picks[0].value);
+              if (el.value !== picks[0].value) { el.value = picks[0].value; fire(el, ['input', 'change']); }
             }
             return { ok: true, note: `picked "${picks.map((p) => p.label).join(', ')}"` };
           }
-          // ARIA listbox
+          // ARIA listbox with options in the DOM
           const best = JAF.bestOption(v, entry.options);
-          if (!best) return { ok: false, note: `no option matched "${v}"` };
-          click(el); await JAF.sleep(200); click(best.el);
+          if (!best || !best.el) return await fillDropdown(entry, el, v);
+          click(el); await JAF.sleep(200); click(best.el); await JAF.sleep(100);
+          const sel = el.querySelector('[aria-selected="true"]');
+          if (sel && !JAF.fuzzyEq(JAF.text(sel), best.label)) return { ok: false, note: `clicked "${best.label}" but the list did not change` };
           return { ok: true, note: `picked "${best.label}"` };
         }
         case 'combobox':
-          return await fillCombobox(el, v);
+          return await fillDropdown(entry, el, v);
         case 'date':
           JAF.setNativeValue(el, formatDate(v, el));
           return { ok: true };
@@ -197,7 +424,10 @@
     if (!entry) return;
     const els = entry.els || [entry.el];
     for (const el of els) {
-      const target = el.type === 'file' || el.getAttribute('role') === 'radio' || el.getAttribute('role') === 'checkbox' ? (el.closest('label, div') || el) : el;
+      if (!el) continue;
+      const hidden = !JAF.isVisible(el);
+      const choice = el.type === 'radio' || el.type === 'checkbox' || el.getAttribute('role') === 'radio' || el.getAttribute('role') === 'checkbox';
+      const target = el.type === 'file' || choice || hidden ? (labelFor(el) || el.closest('label, div') || el) : el;
       target.style.outline = `2px solid ${color}`;
       target.style.outlineOffset = '1px';
       setTimeout(() => { target.style.outline = ''; target.style.outlineOffset = ''; }, 6000);

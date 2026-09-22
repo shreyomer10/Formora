@@ -7,6 +7,9 @@
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const same = (a, b) => norm(a) === norm(b);
+
   function root() {
     let r = document.getElementById('applypilot-root');
     if (!r) {
@@ -49,11 +52,30 @@
         item.className = `ap-item ${cls}`;
         const editable = ['ai', 'memory', 'skip', 'fail'].includes(r.source) && r.q.type !== 'file';
         const valueText = Array.isArray(r.value) ? r.value.join(', ') : (r.value ?? '');
+        const opts = r.q.options || [];
+        // Option questions get a real selector so "Apply" can only send values the page accepts.
+        const kind = !editable ? 'none'
+          : opts.length && (r.q.type === 'radio' || r.q.type === 'select') ? 'select'
+          : opts.length && r.q.type === 'checkbox' ? 'checks'
+          : 'text';
+        let editor = '';
+        if (kind === 'select') {
+          const list = opts.slice();
+          if (valueText && !list.some((o) => same(o, valueText))) list.unshift(valueText);
+          editor = `<select class="ap-edit">${list.map((o) => `<option${same(o, valueText) ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+        } else if (kind === 'checks') {
+          const vals = Array.isArray(r.value) ? r.value : String(r.value || '').split(/\s*[,|;]\s*/).filter(Boolean);
+          editor = `<div class="ap-checks">${opts.map((o) => `<label><input type="checkbox"${vals.some((v) => same(v, o)) ? ' checked' : ''} /> ${esc(o)}</label>`).join('')}</div>`;
+        } else if (kind === 'text') {
+          editor = `<textarea>${esc(valueText)}</textarea>`;
+        } else {
+          editor = `<div class="ap-note">${esc(valueText)}</div>`;
+        }
         item.innerHTML = `
           <div class="ap-label">${esc(r.q.label)}<span class="ap-badge">${esc(r.source)}</span><span class="ap-badge">${esc(r.q.type)}</span></div>
-          ${editable ? `<textarea>${esc(valueText)}</textarea>` : `<div class="ap-note">${esc(valueText)}</div>`}
+          ${editor}
           ${r.note ? `<div class="ap-note">${esc(r.note)}</div>` : ''}
-          ${r.q.options && r.q.options.length && editable ? `<div class="ap-note">Options: ${esc(r.q.options.join(' | '))}</div>` : ''}
+          ${opts.length && kind === 'text' ? `<div class="ap-note">Options${r.q.meta?.optionsPartial ? ' (partial)' : ''}: ${esc(opts.join(' | '))}</div>` : ''}
           ${editable ? `<div class="ap-row"><button class="ap-primary" data-act="apply">Apply</button><button data-act="locate">Locate</button></div>` : `<div class="ap-row"><button data-act="locate">Locate</button></div>`}`;
         item.querySelector('.ap-label').onclick = () => JAF.highlight(r.q, '#7c3aed');
         item.querySelector('[data-act="locate"]').onclick = () => {
@@ -64,9 +86,13 @@
         };
         const applyBtn = item.querySelector('[data-act="apply"]');
         if (applyBtn) applyBtn.onclick = async () => {
-          const ta = item.querySelector('textarea');
-          let v = ta.value;
-          if (r.q.type === 'checkbox') v = v.split(/\s*[,|;]\s*/).filter(Boolean);
+          let v;
+          if (kind === 'select') v = item.querySelector('select.ap-edit').value;
+          else if (kind === 'checks') v = Array.from(item.querySelectorAll('.ap-checks input')).filter((c) => c.checked).map((c) => c.parentElement.textContent.trim());
+          else {
+            v = item.querySelector('textarea').value;
+            if (r.q.type === 'checkbox') v = v.split(/\s*[,|;]\s*/).filter(Boolean);
+          }
           applyBtn.textContent = '...';
           const res = await onReapply(r.q, v);
           applyBtn.textContent = res.ok ? 'Applied' : 'Failed';

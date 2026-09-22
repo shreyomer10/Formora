@@ -19,3 +19,7 @@
 #applypilot-root .ap-row button { border: 1px solid #ddd; background: #fafafa; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
 #applypilot-root .ap-row button.ap-primary { background: #7c3aed; color: #fff; border-color: #7c3aed; }
 #applypilot-root .ap-foot { padding: 8px 12px; border-top: 1px solid #eee; font-size: 11px; color: #666; }
+#applypilot-root select.ap-edit { width: 100%; border: 1px solid #ddd; border-radius: 6px; padding: 6px; font-size: 12px; background: #fff; color: #111; }
+#applypilot-root .ap-checks { display: flex; flex-direction: column; gap: 3px; max-height: 160px; overflow: auto; border: 1px solid #ddd; border-radius: 6px; padding: 6px; }
+#applypilot-root .ap-checks label { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+#applypilot-root .ap-checks input { margin: 0; width: 14px; height: 14px; }

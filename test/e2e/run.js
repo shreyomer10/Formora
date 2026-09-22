@@ -71,6 +71,9 @@ function serve() {
       relocate: (document.querySelector('input[name=relocate]:checked') || {}).value || '',
       wa: (document.querySelector('[role=radio][aria-checked=true]') || {}).dataset?.value || '',
       tech: Array.from(document.querySelectorAll('input[name="tech[]"]:checked')).map((x) => x.value),
+      degree: (document.querySelector('input[name=degree]:checked') || {}).value || '',
+      country: document.getElementById('country-value').textContent,
+      countryMenuOpen: !!document.querySelector('.select-menu'),
       why: document.getElementById('why').value,
       proj: document.getElementById('proj').value,
       ref: document.getElementById('ref').value,
@@ -92,11 +95,14 @@ function serve() {
     expect('expected ctc', got.ctc === '14 LPA');
     expect('resume attached', got.cv === 'asha-resume.pdf');
     expect('experience select 1-3', got.exp === '1-3');
+    expect('hidden-input styled radio: degree B.Tech', got.degree === 'btech');
+    expect('popup-only combobox: country India', got.country === 'India');
+    expect('combobox menu closed afterwards', !got.countryMenuOpen);
     expect('memory answer reused', got.proj === 'I built a payments reconciliation service.');
     expect('honeypot untouched', got.honeypot === '');
     expect('why left for LLM (no key)', got.why === '');
     expect('panel rendered', got.panel);
-    expect('all 17 questions extracted', got.labels.length >= 17);
+    expect('all 19 questions extracted', got.labels.length >= 19);
     expect('reference field left alone', got.ref === '');
     console.log('status:', got.status);
 

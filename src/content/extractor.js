@@ -6,7 +6,7 @@
 
   const CONTROL_SEL =
     'input, select, textarea, [contenteditable="true"], [role="textbox"], [role="combobox"], ' +
-    '[role="radio"], [role="checkbox"], [role="switch"], [role="listbox"], [role="spinbutton"]';
+    '[role="radio"], [role="checkbox"], [role="switch"], [role="listbox"], [role="spinbutton"], [aria-haspopup="listbox"]';
   const SKIP_INPUT_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image', 'search', 'password']);
 
   JAF.registry = new Map(); // id -> { kind, el, els, options:[{label,value,el}] }
@@ -39,6 +39,15 @@
 
   function isControl(el) {
     return el.matches && el.matches(CONTROL_SEL);
+  }
+
+  // A hidden native radio/checkbox still counts when the user can see a label for it.
+  function hasVisibleLabel(el) {
+    if (el.labels && Array.from(el.labels).some(JAF.isVisible)) return true;
+    const wrap = el.closest('label');
+    if (wrap && JAF.isVisible(wrap)) return true;
+    const p = el.parentElement;
+    return !!(p && JAF.isVisible(p) && JAF.labelText(p, 120));
   }
 
   function countOtherControls(container, ownEls) {
@@ -127,12 +136,12 @@
     if (tag === 'INPUT') {
       const t = (el.type || 'text').toLowerCase();
       if (['email', 'tel', 'url', 'number', 'date', 'file', 'radio', 'checkbox'].includes(t)) return t;
-      if (el.getAttribute('role') === 'combobox' || el.getAttribute('aria-autocomplete') === 'list') return 'combobox';
+      if (el.getAttribute('role') === 'combobox' || el.getAttribute('aria-autocomplete') === 'list' || el.getAttribute('aria-haspopup') === 'listbox') return 'combobox';
       return 'text';
     }
     const role = el.getAttribute('role');
     if (role === 'textbox' || el.isContentEditable) return el.getAttribute('aria-multiline') === 'true' || el.isContentEditable ? 'textarea' : 'text';
-    if (role === 'combobox') return 'combobox';
+    if (role === 'combobox' || el.getAttribute('aria-haspopup') === 'listbox') return 'combobox';
     if (role === 'listbox') return 'select';
     if (role === 'radio') return 'radio';
     if (role === 'checkbox' || role === 'switch') return 'checkbox';
@@ -172,6 +181,11 @@
     }
     if (type === 'file') return el.files && el.files.length ? el.files[0].name : '';
     if (el.isContentEditable || el.getAttribute('role') === 'textbox') return JAF.text(el);
+    if (type === 'combobox' && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
+      // Dropdown button: its text is the selection, unless it is still the placeholder.
+      const t = JAF.text(el);
+      return t && !/^(select|choose|please|--+|-)/i.test(t) ? t : '';
+    }
     return el.value || '';
   }
 
@@ -210,10 +224,12 @@
       if (el.readOnly && el.tagName !== 'INPUT') return false;
       if (el.matches('[role="listbox"] [role="option"], option')) return false;
       if (el.closest('[role="listbox"]') && el.getAttribute('role') !== 'listbox') return false;
-      // Nested: a [role=combobox] wrapper around a real input -> keep the input only.
-      if (el.getAttribute('role') === 'combobox' && el.querySelector('input, [role="textbox"]')) return false;
+      // Nested: a [role=combobox] / [aria-haspopup] wrapper around a real input -> keep the input only.
+      if ((el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-haspopup')) && el.querySelector('input, textarea, select, [role="textbox"]')) return false;
       const t = (el.type || '').toLowerCase();
       if (t === 'file') return true; // usually hidden behind a styled button
+      // Custom-styled radios/checkboxes hide the native input and show a label instead.
+      if (t === 'radio' || t === 'checkbox') return JAF.isVisible(el) || hasVisibleLabel(el);
       return JAF.isVisible(el);
     });
 

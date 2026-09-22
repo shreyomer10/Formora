@@ -51,7 +51,10 @@
 
   async function loadState() {
     const s = await chrome.storage.local.get(['profile', 'resume', 'settings', 'memory']);
-    return { profile: s.profile || {}, resume: s.resume || null, settings: s.settings || {}, memory: s.memory || {} };
+    // The content script only needs to know whether a key exists; the key itself stays in the service worker.
+    const { apiKey, ...settings } = s.settings || {};
+    settings.hasApiKey = !!apiKey;
+    return { profile: s.profile || {}, resume: s.resume || null, settings, memory: s.memory || {} };
   }
 
   async function saveMemory(memory, q, value, url) {
@@ -68,6 +71,11 @@
       return { questions: [] };
     }
     JAF.log('extracted', questions);
+    if (questions.some((q) => q.type === 'combobox' && !q.options.length && !q.currentValue)) {
+      JAF.overlay.status(`Found ${questions.length} question(s). Reading dropdown options...`);
+      const n = await JAF.discoverOptions(questions);
+      if (n) JAF.log('discovered options for', n, 'dropdown(s)');
+    }
     if (mode === 'scan') {
       JAF.overlay.render(questions.map((q) => ({ q, source: 'skip', value: q.currentValue, note: 'scan only' })), reapply);
       JAF.overlay.status(`Found ${questions.length} question(s). Scan only, nothing filled.`);
@@ -100,7 +108,7 @@
     }
 
     if (pending.length) {
-      if (!settings.apiKey) {
+      if (!settings.hasApiKey) {
         pending.forEach((q) => results.push({ q, source: 'skip', value: '', note: 'no API key set in options' }));
       } else {
         JAF.overlay.status(`Asking ${settings.model || 'Gemini'} for ${pending.length} answer(s)...`);
@@ -109,7 +117,7 @@
         const resp = await chrome.runtime.sendMessage({
           type: 'LLM_FILL',
           payload: {
-            questions: pending.map((q) => ({ id: q.id, label: q.label, type: q.type, options: q.options, required: q.required, maxLength: q.meta?.maxLength || null })),
+            questions: pending.map((q) => ({ id: q.id, label: q.label, type: q.type, options: q.options, required: q.required, maxLength: q.meta?.maxLength || null, optionsPartial: !!q.meta?.optionsPartial })),
             page: JAF.pageContext(),
             previousAnswers: hints,
           },

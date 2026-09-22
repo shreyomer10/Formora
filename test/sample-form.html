@@ -11,6 +11,16 @@
     .aria-radio { display: inline-block; padding: 4px 10px; border: 1px solid #999; border-radius: 6px; margin-right: 6px; cursor: pointer; }
     .aria-radio[aria-checked=true] { background: #dbeafe; }
     .hp { position: absolute; left: -9999px; }
+    /* custom-styled radios: native input hidden, label does the drawing */
+    .pill input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .pill { display: inline-block; padding: 4px 10px; border: 1px solid #999; border-radius: 999px; margin-right: 6px; cursor: pointer; font-weight: 400; }
+    .pill:has(input:checked) { background: #dcfce7; }
+    /* react-select style combobox: options only exist in the DOM while open */
+    .select-control { position: relative; border: 1px solid #999; border-radius: 6px; padding: 4px 6px; }
+    .select-control input { border: 0; outline: 0; width: 100%; }
+    .select-value { position: absolute; left: 8px; top: 6px; pointer-events: none; color: #111; }
+    .select-menu { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid #999; z-index: 5; }
+    .select-menu [role=option] { padding: 4px 8px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -43,6 +53,19 @@
       <span class="aria-radio" role="radio" aria-checked="false" tabindex="0" data-value="visa">Need sponsorship</span>
     </div>
 
+    <fieldset class="q"><legend>Highest degree *</legend>
+      <label class="pill"><input type="radio" name="degree" value="btech" /> B.Tech</label>
+      <label class="pill"><input type="radio" name="degree" value="mtech" /> M.Tech</label>
+      <label class="pill"><input type="radio" name="degree" value="other" /> Other</label>
+    </fieldset>
+
+    <div class="q"><label for="country">Country *</label>
+      <div class="select-control" id="country-control">
+        <div class="select-value" id="country-value"></div>
+        <input id="country" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-haspopup="listbox" autocomplete="off" placeholder="Select..." />
+      </div>
+    </div>
+
     <fieldset class="q"><legend>Which of these have you worked with?</legend>
       <label><input type="checkbox" name="tech[]" value="node" /> Node.js</label>
       <label><input type="checkbox" name="tech[]" value="go" /> Go</label>
@@ -64,6 +87,31 @@
       r.parentElement.querySelectorAll('[role=radio]').forEach((x) => x.setAttribute('aria-checked', 'false'));
       r.setAttribute('aria-checked', 'true');
     }));
+
+    // Minimal react-select clone: menu exists only while open, filtered by the typed text,
+    // selection shown in a sibling element, input cleared and menu closed on blur.
+    (function () {
+      const COUNTRIES = ['Australia', 'Canada', 'Germany', 'India', 'Indonesia', 'Singapore', 'United Kingdom', 'United States'];
+      const input = document.getElementById('country');
+      const control = document.getElementById('country-control');
+      const value = document.getElementById('country-value');
+      let menu = null;
+      function render() {
+        if (!menu) { menu = document.createElement('div'); menu.className = 'select-menu'; menu.setAttribute('role', 'listbox'); control.appendChild(menu); input.setAttribute('aria-expanded', 'true'); }
+        const q = input.value.toLowerCase();
+        menu.innerHTML = '';
+        COUNTRIES.filter((c) => c.toLowerCase().includes(q)).forEach((c) => {
+          const o = document.createElement('div'); o.setAttribute('role', 'option'); o.textContent = c;
+          o.addEventListener('click', () => { value.textContent = c; input.value = ''; input.placeholder = ''; close(); });
+          menu.appendChild(o);
+        });
+      }
+      function close() { if (menu) { menu.remove(); menu = null; input.setAttribute('aria-expanded', 'false'); } }
+      input.addEventListener('mousedown', render);
+      input.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') render(); });
+      input.addEventListener('input', render);
+      input.addEventListener('blur', () => { input.value = ''; close(); });
+    })();
   </script>
 </body>
 </html>

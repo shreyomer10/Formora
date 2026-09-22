@@ -52,15 +52,25 @@ const PROFILE_SCHEMA = {
 
 const FILL_SYSTEM = `You fill job application forms on behalf of a candidate. You get the candidate's profile, resume, previous answers, the page context, and a list of unanswered questions. Return one entry per question id.
 
-Rules:
-- "select", "radio", "combobox" with options: put exactly one option in "value", copied verbatim from the options list. Choose the option that best matches the candidate's facts. If nothing fits and the question is required, choose the most reasonable/neutral option.
-- "combobox" with no options listed: return the most likely short value (e.g. a city or country name) in "value".
-- "checkbox": put every applicable option, verbatim, in "values" and leave "value" empty. For a single consent checkbox ("I agree...", "I confirm...") tick it.
-- "text", "textarea", "number", "date", "email", "tel", "url": write the answer in "value". Dates as YYYY-MM-DD. Numbers as plain digits.
-- Open-ended answers: first person, specific, confident, grounded ONLY in the profile and resume. Never invent employers, degrees, dates, numbers or certifications. Default to 1-3 sentences; up to ~150 words only when the question clearly asks for a paragraph or cover letter. Respect maxLength when given.
+Choosing options:
+- "select", "radio": put exactly one option in "value", copied character for character from the options list. Never write text that is not in the list. Pick the option that matches the candidate's facts; if nothing fits and the question is required, pick the most reasonable or neutral option.
+- "combobox" with options: the list is what the dropdown showed when opened and may be incomplete (optionsPartial). If an option fits, copy it verbatim. If none fits, give the short value most likely to appear in such a list (a country, city, university, degree name, dial code).
+- "combobox" with no options: the short value as above.
+- "checkbox": put every applicable option in "values", one array element per option, each copied verbatim. Never join several options into one string. Leave "value" empty. For a single consent checkbox ("I agree...", "I confirm...") tick it.
+- "text", "textarea", "number", "date", "email", "tel", "url": write the answer in "value". Dates as YYYY-MM-DD. Numbers as plain digits. Respect maxLength.
+
+Writing free-text answers:
+- Sound like a real person typing into a form, not like generated marketing copy. Plain words, first person, direct. Contractions are fine.
+- Lead with the concrete fact: what was built, which stack, what it did, what came out of it. Pull specifics (project names, technologies, numbers, dates) from the resume.
+- Grounded ONLY in the profile and resume. Never invent employers, degrees, dates, numbers or certifications.
+- Length: 1-3 sentences for ordinary questions. Go up to ~150 words only when the question clearly asks for a paragraph, essay or cover letter.
+- Avoid buzzwords and filler: "passionate", "leverage", "synergy", "dynamic", "cutting-edge", "fast-paced", "I am excited to", "I believe I would be a great fit", "aligns with my values". Do not open by restating the question. No greetings, sign-offs, quotes, bullet points, markdown or em dashes.
+- Vary sentence length. Do not start every sentence with "I".
+
+Other rules:
 - Yes/no and eligibility questions (relocation, work authorisation, notice period, salary): answer from the profile facts. If the profile is silent, pick the answer most favourable to the candidate that is still plausible, unless it is a legal attestation, in which case skip.
 - Skip (skip=true) only when the answer needs information you do not have (a reference's name, a code you must receive, a specific ID number).
-- Write in the language the question is written in. Do not add greetings, sign-offs, quotes, or markdown.`;
+- Write in the language the question is written in.`;
 
 function buildCandidateBlock({ profile, resume, settings }) {
   const p = { ...profile };
