@@ -1,28 +1,51 @@
 {
   "manifest_version": 3,
-  "name": "ApplyPilot - AI Job Application Autofill",
+  "name": "Formora - one-click job application autofill",
   "version": "0.2.0",
-  "description": "Extracts every question on a job application (ATS, company career pages, Google Forms) and fills it from your profile, resume and an LLM. Never auto-submits.",
-  "permissions": ["storage", "activeTab", "scripting"],
-  "host_permissions": ["https://generativelanguage.googleapis.com/*"],
+  "description": "Application forms filled with complete honesty. Reads every question on a job application (Workday, Greenhouse, career pages, Google Forms), fills it from your profile and resume, and lets you review before you submit. Never auto-submits.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*"
+  ],
   "background": {
     "service_worker": "src/background/service-worker.js",
     "type": "module"
   },
   "action": {
     "default_popup": "src/popup/popup.html",
-    "default_title": "ApplyPilot"
+    "default_title": "Formora",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "options_page": "src/options/options.html",
   "commands": {
     "fill-page": {
-      "suggested_key": { "default": "Alt+Shift+F" },
+      "suggested_key": {
+        "default": "Alt+Shift+F"
+      },
       "description": "Fill the current application form"
     }
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
       "all_frames": true,
       "run_at": "document_idle",
       "js": [
@@ -35,7 +58,20 @@
         "src/content/overlay.js",
         "src/content/main.js"
       ],
-      "css": ["src/content/overlay.css"]
+      "css": [
+        "src/content/overlay.css"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/icon32.png"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
   ]
 }

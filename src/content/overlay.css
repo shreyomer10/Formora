@@ -1,23 +1,25 @@
 #applypilot-root { all: initial; position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: 13px; color: #111; }
 #applypilot-root * { box-sizing: border-box; font-family: inherit; }
 #applypilot-root .ap-panel { width: 380px; max-width: calc(100vw - 16px); max-height: 70vh; display: flex; flex-direction: column; background: #fff; border: 1px solid #ddd; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.22); overflow: hidden; }
-#applypilot-root .ap-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px; background: #7c3aed; color: #fff; font-weight: 600; cursor: grab; user-select: none; touch-action: none; }
+#applypilot-root .ap-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px; background: #1C3A4B; color: #fff; font-weight: 600; cursor: grab; user-select: none; touch-action: none; }
 #applypilot-root.ap-dragging .ap-head { cursor: grabbing; }
 #applypilot-root .ap-head .ap-title { flex: 1; }
 #applypilot-root .ap-head .ap-step { font-weight: 400; font-size: 11px; opacity: .85; margin-right: 4px; }
 #applypilot-root .ap-head button { background: rgba(255,255,255,.18); border: 0; color: #fff; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px; line-height: 1.2; }
 #applypilot-root .ap-head button:hover { background: rgba(255,255,255,.3); }
-#applypilot-root .ap-status { padding: 8px 12px; background: #f6f3ff; border-bottom: 1px solid #eee; color: #4c1d95; }
+#applypilot-root .ap-row button.ap-primary:hover, #applypilot-root .ap-tools button:hover, #applypilot-root .ap-change button.ap-primary:hover { background: #254B60; border-color: #254B60; }
+#applypilot-root .ap-logo { width: 18px; height: 18px; border-radius: 4px; margin-right: 2px; vertical-align: middle; }
+#applypilot-root .ap-status { padding: 8px 12px; background: #EEF3F5; border-bottom: 1px solid #eee; color: #1C3A4B; }
 #applypilot-root .ap-change { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 12px; background: #fff7ed; border-bottom: 1px solid #fed7aa; color: #9a3412; font-weight: 600; }
 #applypilot-root .ap-change span { flex: 1 1 100%; }
 #applypilot-root .ap-change button { border: 1px solid #ddd; background: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; color: #111; }
-#applypilot-root .ap-change button.ap-primary { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+#applypilot-root .ap-change button.ap-primary { background: #1C3A4B; color: #fff; border-color: #1C3A4B; }
 #applypilot-root .ap-list { overflow: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
 #applypilot-root.ap-min .ap-list, #applypilot-root.ap-min .ap-foot, #applypilot-root.ap-min .ap-change { display: none; }
 #applypilot-root.ap-min .ap-panel { width: 300px; }
 #applypilot-root .ap-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; }
 #applypilot-root .ap-item.ap-ok { border-left: 4px solid #16a34a; }
-#applypilot-root .ap-item.ap-ai { border-left: 4px solid #7c3aed; }
+#applypilot-root .ap-item.ap-ai { border-left: 4px solid #1C3A4B; }
 #applypilot-root .ap-item.ap-skip { border-left: 4px solid #f59e0b; }
 #applypilot-root .ap-item.ap-fail { border-left: 4px solid #dc2626; }
 #applypilot-root .ap-item.ap-info { border-left: 4px solid #0ea5e9; background: #f0f9ff; }
@@ -29,29 +31,29 @@
 #applypilot-root textarea { width: 100%; min-height: 56px; border: 1px solid #ddd; border-radius: 6px; padding: 6px; font-size: 12px; resize: vertical; }
 #applypilot-root .ap-row { display: flex; gap: 6px; margin-top: 6px; }
 #applypilot-root .ap-row button { border: 1px solid #ddd; background: #fafafa; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
-#applypilot-root .ap-row button.ap-primary { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+#applypilot-root .ap-row button.ap-primary { background: #1C3A4B; color: #fff; border-color: #1C3A4B; }
 #applypilot-root .ap-foot { padding: 8px 12px; border-top: 1px solid #eee; font-size: 11px; color: #666; }
 #applypilot-root select.ap-edit { width: 100%; border: 1px solid #ddd; border-radius: 6px; padding: 6px; font-size: 12px; background: #fff; color: #111; }
 #applypilot-root .ap-checks { display: flex; flex-direction: column; gap: 3px; max-height: 160px; overflow: auto; border: 1px solid #ddd; border-radius: 6px; padding: 6px; }
 #applypilot-root .ap-checks label { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
 #applypilot-root .ap-checks input { margin: 0; width: 14px; height: 14px; }
 #applypilot-root .ap-status { display: flex; align-items: center; gap: 8px; }
-#applypilot-root .ap-spin { width: 14px; height: 14px; border: 2px solid #c4b5fd; border-top-color: #7c3aed; border-radius: 50%; animation: ap-rot .8s linear infinite; flex: none; display: inline-block; }
+#applypilot-root .ap-spin { width: 14px; height: 14px; border: 2px solid #9DB4C0; border-top-color: #1C3A4B; border-radius: 50%; animation: ap-rot .8s linear infinite; flex: none; display: inline-block; }
 #applypilot-root .ap-spin[hidden] { display: none; }
 #applypilot-root .ap-spin-sm { width: 10px; height: 10px; border-width: 2px; margin-right: 4px; vertical-align: -1px; }
 @keyframes ap-rot { to { transform: rotate(360deg); } }
 #applypilot-root .ap-tools { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid #eee; background: #fafafa; }
 #applypilot-root .ap-tools[hidden] { display: none; }
-#applypilot-root .ap-tools button { border: 1px solid #7c3aed; background: #7c3aed; color: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+#applypilot-root .ap-tools button { border: 1px solid #1C3A4B; background: #1C3A4B; color: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
 #applypilot-root .ap-tools button:disabled { opacity: .6; cursor: wait; }
 #applypilot-root .ap-tools-note { font-size: 11px; color: #666; }
 #applypilot-root .ap-empty { padding: 24px 12px; text-align: center; color: #777; font-size: 12px; }
-#applypilot-root .ap-item.ap-pending { border-left: 4px solid #c4b5fd; }
-#applypilot-root .ap-badge.ap-wait { background: #ede9fe; color: #5b21b6; }
+#applypilot-root .ap-item.ap-pending { border-left: 4px solid #9DB4C0; }
+#applypilot-root .ap-badge.ap-wait { background: #E3EBEF; color: #1C3A4B; }
 #applypilot-root .ap-shimmer { height: 12px; border-radius: 4px; margin: 6px 0; background: linear-gradient(90deg, #f1f1f1 25%, #e2e2e2 50%, #f1f1f1 75%); background-size: 200% 100%; animation: ap-shine 1.2s linear infinite; }
 #applypilot-root .ap-shimmer-short { width: 60%; }
 @keyframes ap-shine { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-#applypilot-root .ap-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, #c4b5fd 50%, #c4b5fd 60%, transparent 60%, transparent 75%, #c4b5fd 75%, #c4b5fd 85%, transparent 85%); border-bottom-right-radius: 12px; }
+#applypilot-root .ap-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, #9DB4C0 50%, #9DB4C0 60%, transparent 60%, transparent 75%, #9DB4C0 75%, #9DB4C0 85%, transparent 85%); border-bottom-right-radius: 12px; }
 #applypilot-root .ap-panel { position: relative; min-width: 300px; min-height: 180px; }
 #applypilot-root.ap-min .ap-resize, #applypilot-root.ap-min .ap-tools { display: none; }
 #applypilot-root.ap-min .ap-panel { height: auto !important; min-height: 0; }

@@ -1,6 +1,6 @@
-# ApplyPilot
+# Formora
 
-Chrome extension that fills job application forms for you: ATS pages (Workday, Greenhouse, Lever, iCIMS...), company career pages and Google Forms.
+Chrome extension that fills job application forms for you. Tagline: application forms filled with complete honesty. Works on: ATS pages (Workday, Greenhouse, Lever, iCIMS...), company career pages and Google Forms.
 
 It reads every question on the page, fills the factual ones from your stored profile and resume, and sends only the open-ended or judgement questions to Gemini in a single call. You review the result in an on-page panel and submit yourself. It never auto-submits.
 

@@ -440,9 +440,14 @@
   // Cheap fingerprint of the form on the page: used to notice when a multi-step
   // application moved to another step without a full page load.
   JAF.formFingerprint = function () {
-    const els = JAF.deepQueryAll(CONTROL_SEL).filter((el) => !inOverlay(el) && !inNav(el) && !(el.tagName === 'INPUT' && SKIP_INPUT_TYPES.has((el.type || '').toLowerCase())) && (el.type === 'file' || JAF.isVisible(el)));
-    const known = els.filter((el) => { for (const e of JAF.registry.values()) { if (e.el === el || (e.els && e.els.includes(el))) return true; } return false; }).length;
-    return { url: location.href, count: els.length, unknown: els.length - known };
+    const showing = (el) => el.type === 'file' || JAF.isVisible(el);
+    const els = JAF.deepQueryAll(CONTROL_SEL).filter((el) => !inOverlay(el) && !inNav(el) && !(el.tagName === 'INPUT' && SKIP_INPUT_TYPES.has((el.type || '').toLowerCase())) && showing(el));
+    const reg = new Set();
+    for (const e of JAF.registry.values()) { if (e.el) reg.add(e.el); (e.els || []).forEach((x) => reg.add(x)); }
+    const known = els.filter((el) => reg.has(el)).length;
+    // Extracted controls that are gone or hidden now: a whole step moving away, or one field re-rendered.
+    const lost = Array.from(reg).filter((el) => !el.isConnected || !showing(el)).length;
+    return { url: location.href, count: els.length, unknown: els.length - known, known, lost, total: reg.size };
   };
 
   // Page context for the LLM: title, URL and a slice of the visible text that is

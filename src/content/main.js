@@ -107,17 +107,28 @@
     watchTimer = setInterval(() => {
       if (JAF.running || !document.getElementById('applypilot-root')) return;
       const fp = JAF.formFingerprint();
-      // Compare with the last announced state, so one new step is announced once, not every tick.
-      const changed = fp.url !== baseline.url || fp.unknown !== baseline.unknown || Math.abs(fp.count - baseline.count) > 2;
-      if (!changed) { lastSeen = fp; stableTicks = 0; return; }
-      // Wait for the DOM to settle (SPA transitions render in pieces) before announcing the step.
-      const sameAsLast = lastSeen && fp.url === lastSeen.url && fp.count === lastSeen.count && fp.unknown === lastSeen.unknown;
+      // Frameworks re-mount single inputs on blur (Workday), and a radio choice can reveal a field
+      // or two: those are the same page. A new page is when most of what we extracted is gone and
+      // other fields took its place, or the URL moved and the fields changed with it.
+      const net = fp.unknown - fp.lost; // fields that appeared beyond one-for-one replacements
+      const mostLost = fp.total > 0 && fp.lost >= Math.max(2, Math.ceil(fp.total * 0.6));
+      const newPage = (mostLost && fp.unknown >= 2) ||
+        (fp.url !== baseline.url && (fp.lost > 0 || fp.unknown > 0)) ||
+        (fp.total === 0 && Math.abs(fp.count - baseline.count) >= 3);
+      const grew = !newPage && net >= 2 && (net - (baseline.unknown - baseline.lost)) >= 2;
+      if (!newPage && !grew) { lastSeen = fp; stableTicks = 0; return; }
+      // Wait for the DOM to settle (SPA transitions render in pieces) before announcing.
+      const sameAsLast = lastSeen && fp.url === lastSeen.url && fp.count === lastSeen.count && fp.unknown === lastSeen.unknown && fp.lost === lastSeen.lost;
       lastSeen = fp;
       stableTicks = sameAsLast ? stableTicks + 1 : 0;
       if (stableTicks < 2) return;
       baseline = fp;
-      if (fp.count > 0) JAF.overlay.pageChanged(fp);
-      else JAF.overlay.status('Page changed; no form fields found yet.');
+      if (newPage) {
+        if (fp.count > 0) JAF.overlay.pageChanged(fp);
+        else JAF.overlay.status('Page changed; no form fields found yet.');
+      } else {
+        JAF.overlay.fieldsAppeared(net); // keep the current answers on screen
+      }
     }, 700);
   };
 
@@ -236,7 +247,7 @@
             if (!q.type.match(/checkbox/) && !String(value || '').trim()) { results.push({ q, source: 'skip', value: '', note: a.note || 'model returned nothing' }); continue; }
             const res = await JAF.fill(q, value, resume);
             results.push({ q, source: res.ok ? 'ai' : 'fail', value, note: res.note || a.note || '' });
-            if (res.ok) { JAF.highlight(q, '#7c3aed'); await saveMemory(memory, q, value, location.href); }
+            if (res.ok) { JAF.highlight(q, '#1C3A4B'); await saveMemory(memory, q, value, location.href); }
           }
         }
       }
@@ -251,7 +262,7 @@
   async function reapply(q, value) {
     const { resume, memory } = await loadState();
     const res = await JAF.fill(q, value, resume);
-    if (res.ok) { JAF.highlight(q, '#7c3aed'); await saveMemory(memory, q, value, location.href); }
+    if (res.ok) { JAF.highlight(q, '#1C3A4B'); await saveMemory(memory, q, value, location.href); }
     return res;
   }
 

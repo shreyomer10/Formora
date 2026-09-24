@@ -97,7 +97,7 @@
         r.innerHTML = `
           <div class="ap-panel">
             <div class="ap-head" title="Drag to move. Double-click to reset position and size.">
-              <span class="ap-title">ApplyPilot</span><span class="ap-step"></span>
+              <span class="ap-title"><img class="ap-logo" alt="" src="${chrome.runtime.getURL("icons/icon32.png")}" /> Formora</span><span class="ap-step"></span>
               <button data-act="fill" title="Extract and fill the form on this page">Fill page</button>
               <button data-act="scan" title="Only list the questions, fill nothing">Scan</button>
               <button data-act="min" title="Collapse">&#8211;</button>
@@ -166,6 +166,17 @@
       this.minimize(false);
     },
 
+    // Same page, a few new fields (a "Yes" that revealed more questions). Offer, keep the list.
+    fieldsAppeared(n) {
+      this.show();
+      const bar = root().querySelector('.ap-change');
+      bar.hidden = false;
+      bar.innerHTML = `<span>${n} new field(s) appeared on this page.</span><button class="ap-primary" data-act="fill-new">Fill new fields</button><button data-act="dismiss" title="Ignore">&#10005;</button>`;
+      bar.querySelector('[data-act="fill-new"]').onclick = () => JAF.run({ mode: 'fill' });
+      bar.querySelector('[data-act="dismiss"]').onclick = () => { bar.hidden = true; if (JAF.markSeen) JAF.markSeen(); };
+      this.minimize(false);
+    },
+
     tools(handler, note) {
       const t = root().querySelector('.ap-tools');
       applyAllHandler = handler;
@@ -227,9 +238,9 @@
           ${r.note ? `<div class="ap-note">${esc(r.note)}</div>` : ''}
           ${opts.length && kind === 'text' ? `<div class="ap-note ap-opts">Options${r.q.meta?.optionsPartial ? ' (partial)' : ''}: ${esc(opts.join(' | '))}</div>` : ''}
           ${editable ? `<div class="ap-row"><button class="ap-primary" data-act="apply">Apply</button><button data-act="locate">Locate</button></div>` : `<div class="ap-row"><button data-act="locate">Locate</button></div>`}`;
-        item.querySelector('.ap-label').onclick = () => JAF.highlight(r.q, '#7c3aed');
+        item.querySelector('.ap-label').onclick = () => JAF.highlight(r.q, '#1C3A4B');
         item.querySelector('[data-act="locate"]').onclick = () => {
-          JAF.highlight(r.q, '#7c3aed');
+          JAF.highlight(r.q, '#1C3A4B');
           const entry = JAF.registry.get(r.q.id);
           const el = entry && (entry.el || (entry.els && entry.els[0]));
           if (el) el.scrollIntoView({ block: 'center' });

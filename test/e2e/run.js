@@ -123,6 +123,16 @@ function serve() {
     console.log('apply all', applied);
     expect('Apply all wrote the edited answer into the form', applied.why === 'Because payments are hard.' && /applied \d+/.test(applied.note));
 
+    // Same page, one field re-mounted by the framework (Workday does this on blur): the list must stay.
+    const rerender = await page.evaluate(async () => {
+      const old = document.getElementById('np');
+      const fresh = old.cloneNode(true); old.replaceWith(fresh);
+      await new Promise((r) => setTimeout(r, 3500));
+      return { items: document.querySelectorAll('#applypilot-root .ap-item').length, bar: !document.querySelector('#applypilot-root .ap-change').hidden, empty: !!document.querySelector('#applypilot-root .ap-empty') };
+    });
+    console.log('re-render', rerender);
+    expect('re-mounting one input on the same page keeps the answers (no "page changed")', rerender.items > 10 && !rerender.bar && !rerender.empty);
+
     // Resize: drag the grip, panel grows and the size is remembered.
     const resized = await page.evaluate(async () => {
       const p = document.querySelector('#applypilot-root .ap-panel');
