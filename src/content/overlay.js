@@ -160,7 +160,7 @@
       bar.innerHTML = `<span>Page changed: ${esc(what)} found.</span><button class="ap-primary" data-act="fill-new">Fill this page</button><button data-act="scan-new">Scan only</button><button data-act="dismiss" title="Ignore">&#10005;</button>`;
       bar.querySelector('[data-act="fill-new"]').onclick = () => JAF.run({ mode: 'fill' });
       bar.querySelector('[data-act="scan-new"]').onclick = () => JAF.run({ mode: 'scan' });
-      bar.querySelector('[data-act="dismiss"]').onclick = () => { bar.hidden = true; if (JAF.markSeen) JAF.markSeen(); };
+      bar.querySelector('[data-act="dismiss"]').onclick = () => { bar.hidden = true; this.status('Ready.'); if (JAF.markSeen) JAF.markSeen(true); };
       this.status('New page detected.');
       this.empty('This looks like a new page. Its questions will appear here after you click Fill this page.');
       this.minimize(false);

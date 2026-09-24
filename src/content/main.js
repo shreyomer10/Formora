@@ -97,7 +97,12 @@
   function setActive(on) { try { if (on) sessionStorage.setItem(ACTIVE_KEY, '1'); else sessionStorage.removeItem(ACTIVE_KEY); } catch { /* blocked */ } }
   function isActive() { try { return sessionStorage.getItem(ACTIVE_KEY) === '1'; } catch { return false; } }
 
-  JAF.markSeen = function () { baseline = JAF.formFingerprint(); lastSeen = baseline; stableTicks = 0; };
+  // Accept the page as it is now. With `forget`, the previous step's extracted fields are dropped too,
+  // so a dismissed "page changed" is not re-announced on the next tick.
+  JAF.markSeen = function (forget) {
+    if (forget) JAF.registry = new Map();
+    baseline = JAF.formFingerprint(); lastSeen = baseline; stableTicks = 0;
+  };
 
   JAF.startWatch = function () {
     if (!isTop) return;
@@ -116,7 +121,9 @@
         (fp.url !== baseline.url && (fp.lost > 0 || fp.unknown > 0)) ||
         (fp.total === 0 && Math.abs(fp.count - baseline.count) >= 3);
       const grew = !newPage && net >= 2 && (net - (baseline.unknown - baseline.lost)) >= 2;
-      if (!newPage && !grew) { lastSeen = fp; stableTicks = 0; return; }
+      // Nothing to say unless the page differs from the state last announced or dismissed.
+      const differs = fp.url !== baseline.url || fp.lost !== baseline.lost || fp.unknown !== baseline.unknown || fp.count !== baseline.count;
+      if (!differs || (!newPage && !grew)) { lastSeen = fp; stableTicks = 0; return; }
       // Wait for the DOM to settle (SPA transitions render in pieces) before announcing.
       const sameAsLast = lastSeen && fp.url === lastSeen.url && fp.count === lastSeen.count && fp.unknown === lastSeen.unknown && fp.lost === lastSeen.lost;
       lastSeen = fp;

@@ -229,7 +229,13 @@ function serve() {
     console.log('page-change bar', change);
     expect('wd step2: "Page changed" offer shown after Save and Continue', !change.hidden && /Page changed/.test(change.text));
 
-    await page.click('#applypilot-root [data-act="fill-new"]');
+    // Dismiss must stick: the bar may not come back on its own.
+    await page.click('#applypilot-root .ap-change [data-act="dismiss"]');
+    await new Promise((r) => setTimeout(r, 3500));
+    const dismissed = await page.evaluate(() => document.querySelector('#applypilot-root .ap-change').hidden);
+    expect('wd step2: dismissing "Page changed" keeps it dismissed', dismissed);
+    // The header button still fills the new step.
+    await page.click('#applypilot-root [data-act="fill"]');
     // Typeaheads are searched one value at a time (type, Enter, wait for results), so poll for completion.
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 1000));
