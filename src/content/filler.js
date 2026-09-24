@@ -545,6 +545,7 @@
       }
 
       if (entry.kind === 'gforms-listbox') return await fillGFormsListbox(entry, value);
+      if (entry.kind === 'gforms-file') return await JAF.gformsAttach(entry, resume);
       if (entry.kind === 'dateparts') return await fillDateParts(entry, Array.isArray(value) ? value[0] : value);
 
       const el = entry.el;

@@ -71,11 +71,14 @@ const PROFILE_SCHEMA = {
         currentCompany: { type: 'string' }, currentTitle: { type: 'string' }, totalExperienceYears: { type: 'string' },
         skills: { type: 'string', description: 'Comma separated' },
         college: { type: 'string' }, degree: { type: 'string' }, branch: { type: 'string' }, graduationYear: { type: 'string' }, cgpa: { type: 'string' },
+        tenthPercentage: { type: 'string', description: 'Class 10 / SSC / matriculation result as written, e.g. "92%" or "9.2 CGPA"' },
+        twelfthPercentage: { type: 'string', description: 'Class 12 / HSC / intermediate result as written' },
+        rollNumber: { type: 'string', description: 'College roll / enrollment number if printed' },
         workExperience: { type: 'array', items: WORK_ITEM, description: 'Most recent first. Internships count.' },
         education: { type: 'array', items: EDU_ITEM, description: 'Most recent first.' },
         certifications: { type: 'array', items: CERT_ITEM },
       },
-      required: ['firstName', 'lastName', 'email', 'phone', 'city', 'state', 'country', 'linkedin', 'github', 'portfolio', 'currentCompany', 'currentTitle', 'totalExperienceYears', 'skills', 'college', 'degree', 'branch', 'graduationYear', 'cgpa', 'workExperience', 'education', 'certifications'],
+      required: ['firstName', 'lastName', 'email', 'phone', 'city', 'state', 'country', 'linkedin', 'github', 'portfolio', 'currentCompany', 'currentTitle', 'totalExperienceYears', 'skills', 'college', 'degree', 'branch', 'graduationYear', 'cgpa', 'tenthPercentage', 'twelfthPercentage', 'rollNumber', 'workExperience', 'education', 'certifications'],
       additionalProperties: false,
     },
   },
@@ -105,6 +108,7 @@ Other rules:
 - "section" is the heading the field sits under; "entry" {kind, index} means the field belongs to the index-th block of a repeated section (Work Experience 2 = profile.workExperience[1], Education 1 = profile.education[0], Certifications 1 = profile.certifications[0]). Answer such fields from that exact entry, never from another one.
 - Yes/no and eligibility questions (relocation, work authorisation, notice period, salary): answer from the profile facts. If the profile is silent, pick the answer most favourable to the candidate that is still plausible, unless it is a legal attestation, in which case skip.
 - Skip (skip=true) only when the answer needs information you do not have (a reference's name, a code you must receive, a specific ID number).
+- Marks, percentages, CGPA, roll numbers, dates and salaries are facts: copy them from the profile or resume, never estimate or reuse a different number (a graduation CGPA is not a 10th or 12th percentage). If the exact figure is absent, skip.
 - Write in the language the question is written in.`;
 
 function buildCandidateBlock({ profile, resume, settings }) {

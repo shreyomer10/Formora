@@ -12,6 +12,7 @@ const profile = {
   firstName: 'Asha', lastName: 'Verma', email: 'asha@example.com', phone: '+91 9876543210', dob: '1998-04-12',
   linkedin: 'https://linkedin.com/in/asha', noticePeriod: '30', expectedCtc: '14 LPA', totalExperienceYears: '2.5',
   city: 'Pune', country: 'India', skills: 'Node.js, Go, Kafka', degree: 'B.Tech',
+  tenthPercentage: '92%', twelfthPercentage: '88%', cgpa: '8.9', rollNumber: 'CS2019-042',
 };
 const resume = { fileName: 'asha-resume.pdf', mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.4 fake').toString('base64'), text: 'Asha Verma, backend engineer.' };
 
@@ -77,6 +78,9 @@ function serve() {
       why: document.getElementById('why').value,
       proj: document.getElementById('proj').value,
       ref: document.getElementById('ref').value,
+      p10: document.getElementById('p10').value, p12: document.getElementById('p12').value, gcg: document.getElementById('gcg').value, roll: document.getElementById('roll').value,
+      applyAll: !!document.querySelector('#applypilot-root .ap-tools:not([hidden]) [data-act="apply-all"]'),
+      resizeGrip: !!document.querySelector('#applypilot-root .ap-resize'),
       honeypot: document.querySelector('.hp').value,
       panel: !!document.getElementById('applypilot-root'),
       status: (document.querySelector('#applypilot-root .ap-status') || {}).textContent || '',
@@ -102,8 +106,37 @@ function serve() {
     expect('honeypot untouched', got.honeypot === '');
     expect('why left for LLM (no key)', got.why === '');
     expect('panel rendered', got.panel);
-    expect('all 19 questions extracted', got.labels.length >= 19);
+    expect('all 23 questions extracted', got.labels.length >= 23);
     expect('reference field left alone', got.ref === '');
+    expect('10th / 12th / graduation CGPA / roll number from profile', got.p10 === '92%' && got.p12 === '88%' && got.gcg === '8.9' && got.roll === 'CS2019-042');
+    expect('Apply all button shown for editable answers', got.applyAll);
+    expect('resize grip present', got.resizeGrip);
+
+    // Apply all: edit one skipped answer in the panel, apply everything, check it landed.
+    const applied = await page.evaluate(async () => {
+      const item = Array.from(document.querySelectorAll('#applypilot-root .ap-item')).find((i) => /Why do you want/.test(i.textContent));
+      item.querySelector('textarea').value = 'Because payments are hard.';
+      document.querySelector('#applypilot-root [data-act="apply-all"]').click();
+      await new Promise((r) => setTimeout(r, 1500));
+      return { why: document.getElementById('why').value, note: document.querySelector('#applypilot-root .ap-tools-note').textContent };
+    });
+    console.log('apply all', applied);
+    expect('Apply all wrote the edited answer into the form', applied.why === 'Because payments are hard.' && /applied \d+/.test(applied.note));
+
+    // Resize: drag the grip, panel grows and the size is remembered.
+    const resized = await page.evaluate(async () => {
+      const p = document.querySelector('#applypilot-root .ap-panel');
+      const grip = document.querySelector('#applypilot-root .ap-resize');
+      const before = p.getBoundingClientRect();
+      const g = grip.getBoundingClientRect();
+      const ev = (type, x, y) => grip.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, pointerId: 2, isPrimary: true }));
+      ev('pointerdown', g.left + 5, g.top + 5); ev('pointermove', g.left + 125, g.top + 85); ev('pointerup', g.left + 125, g.top + 85);
+      await new Promise((r) => setTimeout(r, 50));
+      const after = p.getBoundingClientRect();
+      return { dw: Math.round(after.width - before.width), dh: Math.round(after.height - before.height), saved: sessionStorage.getItem('applypilot.size') };
+    });
+    console.log('resize', resized);
+    expect('panel resizable by its corner grip', resized.dw >= 100 && resized.dh >= 60 && !!resized.saved);
     console.log('status:', got.status);
 
     // ---- Google Forms mock ----

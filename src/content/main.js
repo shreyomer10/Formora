@@ -143,10 +143,10 @@
     const { profile, resume, settings, memory } = await loadState();
     const results = [];
     steps += 1;
-    if (isTop) JAF.overlay.setStep(steps);
+    if (isTop) { JAF.overlay.setStep(steps); JAF.overlay.empty('Extracting the questions on this page...'); JAF.overlay.busy('Extracting questions...'); }
 
     if (mode === 'fill' && !JAF.isGForms()) {
-      if (isTop) JAF.overlay.status('Checking for Work Experience / Education / Certification sections...');
+      if (isTop) JAF.overlay.busy('Checking for Work Experience / Education / Certification sections...');
       const notes = await JAF.prepareSections(profile);
       notes.forEach((n) => results.push({ source: 'info', note: n.text }));
     }
@@ -158,7 +158,7 @@
     }
     JAF.log('extracted', questions.length, questions.map((q) => `${q.label} [${q.type}${q.meta?.entry ? ' ' + q.meta.entry.kind + q.meta.entry.index : ''}]`).join(' | '));
     if (questions.some((q) => q.type === 'combobox' && !q.options.length && !q.currentValue && !q.meta?.multi)) {
-      JAF.overlay.status(`Found ${questions.length} question(s). Reading dropdown options...`);
+      JAF.overlay.busy(`Found ${questions.length} question(s). Reading dropdown options...`);
       const n = await JAF.discoverOptions(questions);
       if (n) JAF.log('discovered options for', n, 'dropdown(s)');
     }
@@ -170,7 +170,7 @@
 
     const pending = [];
 
-    JAF.overlay.status(`Found ${questions.length} question(s). Filling profile fields...`);
+    JAF.overlay.busy(`Found ${questions.length} question(s). Filling profile fields...`);
     for (const q of questions) {
       if (q.currentValue && q.type !== 'file' && !settings.overwrite) { results.push({ q, source: 'skip', value: q.currentValue, note: 'already filled' }); continue; }
 
@@ -207,7 +207,9 @@
       if (!settings.hasApiKey) {
         pending.forEach((q) => results.push({ q, source: 'skip', value: '', note: 'no API key set in options' }));
       } else {
-        JAF.overlay.status(`Asking ${settings.model || 'Gemini'} for ${pending.length} answer(s)...`);
+        // Show what is already filled right away; the model's questions get placeholders until it answers.
+        JAF.overlay.render(results.concat(pending.map((q) => ({ q, source: 'pending', value: '', note: '' }))), reapply);
+        JAF.overlay.busy(`Asking ${settings.model || 'Gemini'} for ${pending.length} answer(s)... this takes 10-40 s`);
         const hints = pending.map((q) => memory[JAF.normalizeLabel(q.label)]).filter(Boolean).slice(0, 20)
           .map((m) => ({ question: m.label, previousAnswer: m.answer }));
         const resp = await chrome.runtime.sendMessage({
@@ -261,6 +263,39 @@
       return true;
     }
   });
+
+  // ---- Google Drive picker frame (Google Forms file upload) ----------------------
+  // The form's "Add file" button opens the Drive picker in a cross-origin iframe. This same
+  // content script runs inside that frame; the top frame asks it to drop the stored resume
+  // into the picker's upload input.
+  if (!isTop && /docs\.google\.com$/.test(location.hostname) && /picker/.test(location.pathname)) {
+    window.addEventListener('message', async (e) => {
+      const msg = e.data;
+      if (!msg || msg.type !== 'applypilot-attach') return;
+      const reply = (r) => { try { e.source.postMessage({ type: 'applypilot-attach-result', ...r }, '*'); } catch { /* frame gone */ } };
+      try {
+        const { resume } = await chrome.storage.local.get(['resume']);
+        if (!resume || !resume.base64) return reply({ ok: false, note: 'no resume stored' });
+        // Switch to the Upload tab when the picker opened on another one.
+        const tab = Array.from(document.querySelectorAll('[role="tab"], [role="button"], button, div'))
+          .find((el) => /^upload$/i.test(JAF.text(el)) && JAF.isVisible(el) && el.getBoundingClientRect().width < 200);
+        if (tab) { tab.click(); await JAF.sleep(400); }
+        const input = await JAF.waitFor(() => JAF.deepQueryAll('input[type="file"]').find((i) => !i.disabled), 5000, 150);
+        if (!input) return reply({ ok: false, note: 'no upload input in the picker' });
+        const bin = atob(resume.base64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const dt = new DataTransfer();
+        dt.items.add(new File([bytes], resume.fileName || 'resume.pdf', { type: resume.mimeType || 'application/pdf' }));
+        input.files = dt.files;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        reply({ ok: true, note: `handed ${resume.fileName} to the Drive picker` });
+      } catch (err) {
+        reply({ ok: false, note: err.message });
+      }
+    });
+  }
 
   // After a full page load inside an application the user already started, come back up
   // in a compact state so the next step is one click away.

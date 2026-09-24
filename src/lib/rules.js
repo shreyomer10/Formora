@@ -44,11 +44,15 @@ window.JAF.RULES = [
   { key: 'skills',         test: /\b(skills?|technologies|tech stack|key skills|core competenc)\b/, types: ['text', 'textarea', 'combobox'] },
 
   // Education
-  { key: 'college',        test: /\b(college|university|institute|school name|institution|alma mater)\b/, types: ['text', 'combobox'] },
+  { key: 'college',        test: /^(?!.*\b(roll|enrol|registration|reg\.? ?no|student ?id|college ?id|admission)).*\b(college|university|institute|school name|institution|alma mater)\b/, types: ['text', 'combobox'] },
   { key: 'degree',         test: /\b(degree|qualification|highest education|education level)\b/, types: ['text', 'select', 'combobox', 'radio'] },
   { key: 'branch',         test: /\b(branch|major|specialization|specialisation|field of study|stream|discipline)\b/, types: ['text', 'select', 'combobox'] },
   { key: 'graduationYear', test: /\b(graduation year|year of (graduation|passing|completion)|passing year|batch|graduating in)\b/, types: ['text', 'number', 'select', 'combobox'] },
-  { key: 'cgpa',           test: /\b(cgpa|gpa|percentage|aggregate|marks)\b/, types: ['text', 'number'] },
+  { key: 'tenthPercentage',   test: /\b(10th|tenth|class[ -]?(10|x)\b|x(th)?[ -](std|standard|grade|board)|sslc|matric(ulation)?|secondary school|\bssc)\b/, types: ['text', 'number', 'select', 'combobox', 'radio'] },
+  { key: 'twelfthPercentage', test: /\b(12th|twelfth|class[ -]?(12|xii)\b|xii(th)?[ -](std|standard|grade|board)|hsc|intermediate|higher secondary|senior secondary|\bpuc|pre[- ]university|10\+2)\b/, types: ['text', 'number', 'select', 'combobox', 'radio'] },
+  { key: 'rollNumber',     test: /\b(roll ?(no|number|num)|enrol(l)?ment ?(no|number|id)|registration ?(no|number)|reg\.? ?no|student ?id|college ?id|university (roll|reg)|admission (no|number))\b/, types: ['text', 'number'] },
+  // Graduation CGPA / percentage: only when the label is not about school (10th / 12th).
+  { key: 'cgpa',           test: /^(?!.*\b(10th|12th|tenth|twelfth|class[ -]?(10|12|x|xii)\b|sslc|ssc|hsc|matric|intermediate|secondary|puc|10\+2)).*\b(cgpa|gpa|percentage|aggregate|marks)\b/, types: ['text', 'number', 'select', 'combobox', 'radio'] },
 
   // Resume
   { key: '__resume',       test: /\b(resume|cv|curriculum vitae)\b/, types: ['file'] },
@@ -56,7 +60,7 @@ window.JAF.RULES = [
 
 // Labels that talk about somebody other than the candidate, or about a past
 // employer, must never be auto-filled from the profile. They go to the LLM.
-window.JAF.RULE_EXCLUDE = /\b(reference|referee|emergency|alternate|alternative|secondary|guardian|parent|father|mother|spouse|recruiter|manager|hr|previous|former|last (employer|company)|ex[- ])\b/;
+window.JAF.RULE_EXCLUDE = /\b(reference|referee|emergency|alternate|alternative|secondary (e-?mail|phone|contact|mobile|number)|guardian|parent|father|mother|spouse|recruiter|manager|hr|previous|former|last (employer|company)|ex[- ])\b/;
 
 // Normalize a label into a memory key so "What is your notice period?*" and "notice period" collide.
 window.JAF.normalizeLabel = function (s) {
