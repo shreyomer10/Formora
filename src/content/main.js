@@ -161,7 +161,7 @@
     const { profile, resume, settings, memory } = await loadState();
     const results = [];
     steps += 1;
-    if (isTop) { JAF.overlay.setStep(steps); JAF.overlay.empty('Extracting the questions on this page...'); JAF.overlay.busy('Extracting questions...'); }
+    if (isTop) { JAF.overlay.setStep(steps); JAF.overlay.empty('Your answers will appear here in a moment.'); JAF.overlay.busy('Reading the form…'); }
 
     if (mode === 'fill' && !JAF.isGForms()) {
       if (isTop) JAF.overlay.busy('Checking for Work Experience / Education / Certification sections...');
@@ -236,7 +236,7 @@
       } else {
         // Show what is already filled right away; the model's questions get placeholders until it answers.
         JAF.overlay.render(results.concat(pending.map((q) => ({ q, source: 'pending', value: '', note: '' }))), reapply);
-        JAF.overlay.busy(`Asking ${settings.model || 'Gemini'} for ${pending.length} answer(s)... this takes 10-40 s`);
+        JAF.overlay.busy(`Preparing ${pending.length} ${pending.length === 1 ? 'answer' : 'answers'} from your profile and resume…`);
         const hints = pending.map((q) => memory[JAF.normalizeLabel(q.label)]).filter(Boolean).slice(0, 20)
           .map((m) => ({ question: m.label, previousAnswer: m.answer }));
         const resp = await chrome.runtime.sendMessage({
@@ -269,9 +269,8 @@
       }
     }
 
-    const counts = results.reduce((c, r) => ((c[r.source] = (c[r.source] || 0) + 1), c), {});
     JAF.overlay.render(results, reapply);
-    JAF.overlay.status(`Filled ${(counts.profile || 0) + (counts.memory || 0) + (counts.ai || 0)} of ${questions.length}. profile ${counts.profile || 0} · memory ${counts.memory || 0} · ai ${counts.ai || 0} · skipped ${counts.skip || 0} · manual ${counts.manual || 0} · failed ${counts.fail || 0}`);
+    JAF.overlay.summary(results);
     return { questions, results };
   }
 

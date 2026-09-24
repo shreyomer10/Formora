@@ -112,6 +112,19 @@ function serve() {
     expect('Apply all button shown for editable answers', got.applyAll);
     expect('resize grip present', got.resizeGrip);
 
+    const reviewUi = await page.evaluate(() => {
+      const root = document.getElementById('applypilot-root');
+      root.querySelector('[data-filter="attention"]').click();
+      const attention = [...root.querySelectorAll('.ap-item:not([hidden])')];
+      const filtered = attention.length > 0 && attention.every((i) => ['manual', 'fail', 'skipped'].includes(i.dataset.state));
+      root.querySelector('[data-filter="review"]').click();
+      const emptyReview = !root.querySelector('.ap-filter-empty').hidden;
+      root.querySelector('[data-filter="all"]').click();
+      return { filtered, emptyReview, bannerHidden: getComputedStyle(root.querySelector('.ap-change')).display === 'none', technicalBadges: [...root.querySelectorAll('.ap-badge')].some((b) => /^(combobox|textarea|text|profile|memory|ai)$/.test(b.textContent.trim())) };
+    });
+    expect('review panel: action filter and empty review state work', reviewUi.filtered && reviewUi.emptyReview);
+    expect('review panel: hidden banner takes no space; no technical badges', reviewUi.bannerHidden && !reviewUi.technicalBadges);
+
     // Apply all: edit one skipped answer in the panel, apply everything, check it landed.
     const applied = await page.evaluate(async () => {
       const item = Array.from(document.querySelectorAll('#applypilot-root .ap-item')).find((i) => /Why do you want/.test(i.textContent));
@@ -121,7 +134,7 @@ function serve() {
       return { why: document.getElementById('why').value, note: document.querySelector('#applypilot-root .ap-tools-note').textContent };
     });
     console.log('apply all', applied);
-    expect('Apply all wrote the edited answer into the form', applied.why === 'Because payments are hard.' && /applied \d+/.test(applied.note));
+    expect('Apply all wrote the edited answer into the form', applied.why === 'Because payments are hard.' && /Applied \d+/.test(applied.note));
 
     // Same page, one field re-mounted by the framework (Workday does this on blur): the list must stay.
     const rerender = await page.evaluate(async () => {
@@ -289,7 +302,7 @@ function serve() {
     expect('wd: searchable skills left untouched', w2.chips.length === 0);
     expect('wd: no discovery, typing or Enter events on searchable controls', w2.typeaheadEvents === 0);
     expect('wd: two manual cards with suggestions and Locate, without Apply', w2.manualCards.length === 2 && w2.manualCards.every((c) => !c.apply && c.locate) && w2.manualCards.some((c) => c.text.includes('Data Science and Artificial Intelligence')) && w2.manualCards.some((c) => c.text.includes('Python, Docker, Kotlin, Haskell')));
-    expect('wd: manual fields excluded from filled count', /manual 2/.test(w2.status));
+    expect('wd: manual fields excluded from filled count', /Filled 18 of 23 fields/.test(w2.status));
     expect('wd: resume attached through the drop zone', w2.cv === 'Uploaded: asha-resume.pdf');
     expect('wd: certification attachment left alone', w2.certFile === 0);
     expect('wd: panel shows step 2', /step 2/.test(w2.step));
@@ -313,6 +326,56 @@ function serve() {
     });
     expect('direct fill: searchable controls cannot bypass manual fallback', !guards.result.ok && guards.result.manual && guards.events === 0 && guards.value === 'existing query' && guards.discovered === 0);
     expect('button dropdown: ignored selection is not counted as filled', !guards.button.ok);
+    await controls.evaluate(() => {
+      window.styleRequests = [];
+      window.chrome = { runtime: { getURL: () => '', sendMessage: async (msg) => { window.styleRequests.push(msg.type); return { ok: true }; } } };
+    });
+    // Reproduce an existing tab retaining the previous release's stylesheet.
+    const oldStyles = '#applypilot-root { font: 13px system-ui; } #applypilot-root .ap-status { background: #eef3f5; } #applypilot-root .ap-change { display: flex; } #applypilot-root .ap-item.ap-ok { border-left: 4px solid green; }';
+    await controls.addStyleTag({ content: oldStyles });
+    await controls.addScriptTag({ path: path.join(EXT, 'src/content/overlay.js') });
+    const requestedStyles = await controls.evaluate(() => {
+      JAF.overlay.show('Ready.');
+      return window.styleRequests.join(',');
+    });
+    expect('existing tab: stale styles trigger a refresh', requestedStyles === 'REFRESH_OVERLAY_STYLES');
+    await controls.addStyleTag({ path: path.join(EXT, 'src/content/overlay.css') });
+    await controls.addStyleTag({ content: oldStyles }); // old injection must not override the updated UI
+    // The button transitions from the browser default to the refreshed theme.
+    await controls.waitForFunction(() => getComputedStyle(document.querySelector('#applypilot-root .ap-actions [data-act="fill"]')).backgroundColor === 'rgb(28, 58, 75)');
+    const transitions = await controls.evaluate(async () => {
+      const results = [
+        { q: { id: 'search', label: 'Graduation year', type: 'combobox', meta: { manualFill: 'manual' }, options: [] }, source: 'manual', value: '2027' },
+        { q: { id: 'degree', label: 'Describe your work', type: 'textarea', options: [] }, source: 'ai', value: 'My draft answer.' },
+      ];
+      let shouldFail = true;
+      JAF.overlay.render(results, async () => { if (shouldFail) throw new Error('Site unavailable'); return { ok: true }; });
+      JAF.overlay.summary(results);
+      const root = document.getElementById('applypilot-root');
+      const heading = root.querySelector('.ap-status strong').getBoundingClientRect();
+      const detail = root.querySelector('.ap-status-detail').getBoundingClientRect();
+      const styling = root.querySelector('.ap-title').textContent.trim() === 'Formora'
+        && detail.top > heading.bottom
+        && /fields\s+1 field still needs your input/.test(root.querySelector('.ap-status-text').textContent)
+        && getComputedStyle(root.querySelector('.ap-actions [data-act="fill"]')).backgroundColor === 'rgb(28, 58, 75)'
+        && getComputedStyle(root.querySelector('[data-filter="all"]')).borderRadius === '9px'
+        && getComputedStyle(root.querySelector('.ap-change')).display === 'none';
+      root.querySelector('[data-filter="review"]').click();
+      const card = root.querySelector('.ap-item:not([hidden])');
+      const onlyReview = card.dataset.state === 'review' && root.querySelectorAll('.ap-item:not([hidden])').length === 1;
+      const input = card.querySelector('textarea');
+      input.value = 'My revised answer.';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      const dirty = card.dataset.state === 'edited' && /Unsaved changes/.test(card.textContent) && !card.hidden;
+      await card.querySelector('[data-act="apply"]').onclick();
+      root.querySelector('[data-filter="attention"]').click();
+      const failed = card.dataset.state === 'fail' && !card.hidden && !card.querySelector('[data-act="apply"]').disabled;
+      shouldFail = false;
+      await card.querySelector('[data-act="apply"]').onclick();
+      const success = card.dataset.state === 'filled' && card.hidden && root.querySelector('[data-filter="attention"] span').textContent === '1' && /Filled 1 of 2 fields/.test(root.querySelector('.ap-status').textContent);
+      return { styling, onlyReview, dirty, failed, success };
+    });
+    expect('review panel: review filter, unsaved edits, failed apply and successful retry', Object.values(transitions).every(Boolean));
     await controls.close();
   } catch (e) {
     exitCode = 1;

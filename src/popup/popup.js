@@ -6,11 +6,17 @@ async function send(type) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id || !/^https?:|^file:/.test(tab.url || '')) { status.textContent = 'Open a job application page first.'; return; }
   try {
+    // Existing tabs can still have the stylesheet from before an extension reload.
+    await chrome.scripting.insertCSS({ target: { tabId: tab.id, allFrames: true }, files: ['src/content/overlay.css'] });
+  } catch (e) {
+    status.textContent = 'Could not style the panel: ' + e.message;
+    return;
+  }
+  try {
     await chrome.tabs.sendMessage(tab.id, { type });
   } catch {
     try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: FILES });
-      await chrome.scripting.insertCSS({ target: { tabId: tab.id, allFrames: true }, files: ['src/content/overlay.css'] });
       await chrome.tabs.sendMessage(tab.id, { type });
     } catch (e) {
       status.textContent = 'Could not reach the page: ' + e.message;

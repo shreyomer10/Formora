@@ -1,59 +1,81 @@
-#applypilot-root { all: initial; position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: 13px; color: #111; }
-#applypilot-root * { box-sizing: border-box; font-family: inherit; }
-#applypilot-root .ap-panel { width: 380px; max-width: calc(100vw - 16px); max-height: 70vh; display: flex; flex-direction: column; background: #fff; border: 1px solid #ddd; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.22); overflow: hidden; }
-#applypilot-root .ap-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px; background: #1C3A4B; color: #fff; font-weight: 600; cursor: grab; user-select: none; touch-action: none; }
-#applypilot-root.ap-dragging .ap-head { cursor: grabbing; }
-#applypilot-root .ap-head .ap-title { flex: 1; }
-#applypilot-root .ap-head .ap-step { font-weight: 400; font-size: 11px; opacity: .85; margin-right: 4px; }
-#applypilot-root .ap-head button { background: rgba(255,255,255,.18); border: 0; color: #fff; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px; line-height: 1.2; }
-#applypilot-root .ap-head button:hover { background: rgba(255,255,255,.3); }
-#applypilot-root .ap-row button.ap-primary:hover, #applypilot-root .ap-tools button:hover, #applypilot-root .ap-change button.ap-primary:hover { background: #254B60; border-color: #254B60; }
-#applypilot-root .ap-logo { width: 18px; height: 18px; border-radius: 4px; margin-right: 2px; vertical-align: middle; }
-#applypilot-root .ap-status { padding: 8px 12px; background: #EEF3F5; border-bottom: 1px solid #eee; color: #1C3A4B; }
-#applypilot-root .ap-change { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 12px; background: #fff7ed; border-bottom: 1px solid #fed7aa; color: #9a3412; font-weight: 600; }
-#applypilot-root .ap-change span { flex: 1 1 100%; }
-#applypilot-root .ap-change button { border: 1px solid #ddd; background: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; color: #111; }
-#applypilot-root .ap-change button.ap-primary { background: #1C3A4B; color: #fff; border-color: #1C3A4B; }
-#applypilot-root .ap-list { overflow: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
-#applypilot-root.ap-min .ap-list, #applypilot-root.ap-min .ap-foot, #applypilot-root.ap-min .ap-change { display: none; }
-#applypilot-root.ap-min .ap-panel { width: 300px; }
-#applypilot-root .ap-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; }
-#applypilot-root .ap-item.ap-ok { border-left: 4px solid #16a34a; }
-#applypilot-root .ap-item.ap-ai { border-left: 4px solid #1C3A4B; }
-#applypilot-root .ap-item.ap-skip { border-left: 4px solid #f59e0b; }
-#applypilot-root .ap-item.ap-fail { border-left: 4px solid #dc2626; }
-#applypilot-root .ap-item.ap-info { border-left: 4px solid #0ea5e9; background: #f0f9ff; }
-#applypilot-root .ap-label { font-weight: 600; margin-bottom: 4px; cursor: pointer; }
-#applypilot-root .ap-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: #eee; margin-left: 6px; font-weight: 500; vertical-align: middle; }
-#applypilot-root .ap-badge.ap-sec { background: #e0f2fe; color: #075985; }
-#applypilot-root .ap-note { color: #555; font-size: 12px; }
-#applypilot-root .ap-opts { max-height: 72px; overflow: auto; }
-#applypilot-root textarea { width: 100%; min-height: 56px; border: 1px solid #ddd; border-radius: 6px; padding: 6px; font-size: 12px; resize: vertical; }
-#applypilot-root .ap-row { display: flex; gap: 6px; margin-top: 6px; }
-#applypilot-root .ap-row button { border: 1px solid #ddd; background: #fafafa; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
-#applypilot-root .ap-row button.ap-primary { background: #1C3A4B; color: #fff; border-color: #1C3A4B; }
-#applypilot-root .ap-foot { padding: 8px 12px; border-top: 1px solid #eee; font-size: 11px; color: #666; }
-#applypilot-root select.ap-edit { width: 100%; border: 1px solid #ddd; border-radius: 6px; padding: 6px; font-size: 12px; background: #fff; color: #111; }
-#applypilot-root .ap-checks { display: flex; flex-direction: column; gap: 3px; max-height: 160px; overflow: auto; border: 1px solid #ddd; border-radius: 6px; padding: 6px; }
-#applypilot-root .ap-checks label { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
-#applypilot-root .ap-checks input { margin: 0; width: 14px; height: 14px; }
-#applypilot-root .ap-status { display: flex; align-items: center; gap: 8px; }
-#applypilot-root .ap-spin { width: 14px; height: 14px; border: 2px solid #9DB4C0; border-top-color: #1C3A4B; border-radius: 50%; animation: ap-rot .8s linear infinite; flex: none; display: inline-block; }
-#applypilot-root .ap-spin[hidden] { display: none; }
-#applypilot-root .ap-spin-sm { width: 10px; height: 10px; border-width: 2px; margin-right: 4px; vertical-align: -1px; }
+/* Scoped product UI: host page styles must not change the panel's meaning. */
+#applypilot-root[data-formora-ui="2"] { all: initial; --ap-ui-version: 2; --ap-ink: #203743; --ap-muted: #61717b; --ap-brand: #1c3a4b; --ap-border: #dce4e8; --ap-green: #21704c; --ap-amber: #8b570b; --ap-blue: #245fa0; --ap-red: #b13737; position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; color-scheme: light; color: var(--ap-ink); font: 13px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; text-align: left; }
+#applypilot-root[data-formora-ui="2"] *, #applypilot-root[data-formora-ui="2"] *::before, #applypilot-root[data-formora-ui="2"] *::after { box-sizing: border-box; }
+#applypilot-root[data-formora-ui="2"] [hidden] { display: none !important; }
+#applypilot-root[data-formora-ui="2"] button, #applypilot-root[data-formora-ui="2"] textarea, #applypilot-root[data-formora-ui="2"] select, #applypilot-root[data-formora-ui="2"] input { font: inherit; letter-spacing: normal; text-transform: none; }
+#applypilot-root[data-formora-ui="2"] button { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; margin: 0; padding: 6px 11px; border: 1px solid var(--ap-border); border-radius: 8px; background: #fff; color: var(--ap-ink); font-size: 12px; line-height: 1.4; font-weight: 600; cursor: pointer; box-shadow: none; transition: background .15s, border-color .15s; }
+#applypilot-root[data-formora-ui="2"] button:hover { background: #f0f4f6; border-color: #b6c6cf; }
+#applypilot-root[data-formora-ui="2"] button:disabled { opacity: .6; cursor: wait; }
+#applypilot-root[data-formora-ui="2"] :is(button, textarea, select, input):focus-visible { outline: 3px solid #437aa7; outline-offset: 3px; }
+#applypilot-root[data-formora-ui="2"] button.ap-primary { background: var(--ap-brand); color: #fff; border-color: var(--ap-brand); }
+#applypilot-root[data-formora-ui="2"] button.ap-primary:hover { background: #2b5064; border-color: #2b5064; }
+#applypilot-root[data-formora-ui="2"] .ap-panel { position: relative; width: 440px; min-width: min(300px, calc(100vw - 16px)); max-width: calc(100vw - 16px); min-height: 180px; max-height: min(780px, 78dvh); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #cdd8de; border-radius: 18px; background: #fff; box-shadow: 0 16px 56px #122e4130, 0 2px 8px #122e4114; }
+#applypilot-root[data-formora-ui="2"] .ap-head { display: flex; align-items: center; flex: none; gap: 7px; padding: 17px 18px; color: #fff; background: var(--ap-brand); cursor: grab; user-select: none; touch-action: none; }
+#applypilot-root[data-formora-ui="2"].ap-dragging .ap-head { cursor: grabbing; }
+#applypilot-root[data-formora-ui="2"] .ap-title { flex: 1; font-size: 20px; font-weight: 650; letter-spacing: -.5px; line-height: 1.3; }
+#applypilot-root[data-formora-ui="2"] .ap-logo { width: 22px; height: 22px; margin-right: 5px; vertical-align: -3px; }
+#applypilot-root[data-formora-ui="2"] .ap-step { color: #d3e0e7; font-size: 10px; white-space: nowrap; }
+#applypilot-root[data-formora-ui="2"] .ap-head button { min-width: 29px; min-height: 29px; padding: 3px; border-color: #ffffff24; color: #fff; background: #ffffff0d; font-size: 16px; }
+#applypilot-root[data-formora-ui="2"] .ap-head button:hover { background: #ffffff24; }
+#applypilot-root[data-formora-ui="2"] .ap-actions { display: flex; flex: none; gap: 8px; padding: 14px 18px 0; }
+#applypilot-root[data-formora-ui="2"] .ap-actions button { flex: 1; min-height: 40px; border-radius: 10px; font-size: 13px; }
+#applypilot-root[data-formora-ui="2"] .ap-status { display: flex; align-items: center; flex: none; gap: 9px; padding: 16px 18px 12px; }
+#applypilot-root[data-formora-ui="2"] .ap-status-text { min-width: 0; }
+#applypilot-root[data-formora-ui="2"] .ap-status strong { display: block; color: var(--ap-ink); font-size: 17px; font-weight: 650; letter-spacing: -.3px; }
+#applypilot-root[data-formora-ui="2"] .ap-status-detail { display: block; margin-top: 7px; color: var(--ap-muted); font-size: 12px; }
+#applypilot-root[data-formora-ui="2"] .ap-progress { height: 5px; flex: none; margin: 0 18px 16px; overflow: hidden; border-radius: 9px; background: #e9eff0; }
+#applypilot-root[data-formora-ui="2"] .ap-progress > span { display: block; height: 100%; border-radius: inherit; background: #328362; transition: width .2s; }
+#applypilot-root[data-formora-ui="2"] .ap-filters { display: flex; flex: none; gap: 4px; margin: 0 18px 16px; padding: 4px; border-radius: 12px; background: #edf2f5; }
+#applypilot-root[data-formora-ui="2"] .ap-filters button { flex: 1; padding: 7px 6px; min-height: 34px; border: 0; border-radius: 9px; background: transparent; color: #54646f; font-size: 11px; white-space: nowrap; }
+#applypilot-root[data-formora-ui="2"] .ap-filters button[aria-pressed='true'] { color: var(--ap-brand); background: #fff; box-shadow: 0 1px 4px #2037431a; }
+#applypilot-root[data-formora-ui="2"] .ap-filters button[data-filter='attention'][aria-pressed='true'] { color: var(--ap-amber); background: #fff3dc; border-color: #ecd4aa; }
+#applypilot-root[data-formora-ui="2"] .ap-filters button[data-filter='review'][aria-pressed='true'] { color: var(--ap-blue); background: #eaf2fc; border-color: #bfd4ed; }
+#applypilot-root[data-formora-ui="2"] .ap-filters button span { min-width: 20px; padding: 1px 5px; border-radius: 6px; background: #dfe8ed; color: #3f5968; font-size: 10px; font-variant-numeric: tabular-nums; }
+#applypilot-root[data-formora-ui="2"] .ap-tools { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--ap-border); background: #f8fafb; }
+#applypilot-root[data-formora-ui="2"] .ap-tools-note { color: var(--ap-muted); font-size: 11px; }
+#applypilot-root[data-formora-ui="2"] .ap-tools button { flex: none; background: transparent; min-height: 28px; padding: 4px 8px; font-size: 11px; }
+#applypilot-root[data-formora-ui="2"] .ap-change { display: flex; flex: none; align-items: center; flex-wrap: wrap; gap: 6px; padding: 12px 18px; color: var(--ap-amber); background: #fff7e8; border-top: 1px solid #eedab7; }
+#applypilot-root[data-formora-ui="2"] .ap-change > span { flex: 1 1 100%; }
+#applypilot-root[data-formora-ui="2"] .ap-list { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #becbd2 transparent; display: flex; flex-direction: column; gap: 12px; padding: 16px; background: #f5f7f9; border-top: 1px solid var(--ap-border); }
+#applypilot-root[data-formora-ui="2"] .ap-item { flex: none; padding: 15px; border: 1px solid var(--ap-border); border-radius: 12px; background: #fff; overflow-wrap: anywhere; --ap-state: var(--ap-muted); --ap-tint: #f1f4f6; }
+#applypilot-root[data-formora-ui="2"] .ap-item.ap-ok { --ap-state: var(--ap-green); --ap-tint: #eaf5ef; }
+#applypilot-root[data-formora-ui="2"] .ap-item.ap-ai { --ap-state: var(--ap-blue); --ap-tint: #eaf2fc; border-color: #c8daee; }
+#applypilot-root[data-formora-ui="2"] .ap-item.ap-skip { --ap-state: var(--ap-amber); --ap-tint: #fff2d9; border-color: #ead3ab; }
+#applypilot-root[data-formora-ui="2"] .ap-item.ap-fail { --ap-state: var(--ap-red); --ap-tint: #fdeeee; border-color: #ecc6c6; }
+#applypilot-root[data-formora-ui="2"] .ap-item.ap-info { padding: 10px 12px; background: #eef3f6; border: 0; }
+#applypilot-root[data-formora-ui="2"] .ap-section { color: var(--ap-muted); font-size: 10px; font-weight: 600; margin-bottom: 6px; }
+#applypilot-root[data-formora-ui="2"] .ap-label { display: flex; flex-wrap: wrap; align-items: start; gap: 7px 10px; margin-bottom: 9px; cursor: pointer; font-size: 13px; font-weight: 650; line-height: 1.5; }
+#applypilot-root[data-formora-ui="2"] .ap-question { flex: 1 1 150px; }
+#applypilot-root[data-formora-ui="2"] .ap-badge { display: inline-flex; align-items: center; gap: 3px; flex: none; padding: 3px 7px; border-radius: 6px; background: var(--ap-tint); color: var(--ap-state); font-size: 10px; font-weight: 600; line-height: 1.5; }
+#applypilot-root[data-formora-ui="2"] .ap-note { margin: 0 0 10px; color: var(--ap-muted); font-size: 12px; line-height: 1.6; }
+#applypilot-root[data-formora-ui="2"] .ap-info .ap-note { margin: 0; }
+#applypilot-root[data-formora-ui="2"] .ap-value { margin-top: 8px; font-size: 14px; color: var(--ap-ink); white-space: pre-wrap; }
+#applypilot-root[data-formora-ui="2"] .ap-skip .ap-value { padding: 10px 12px; background: #fffbf4; border-radius: 8px; }
+#applypilot-root[data-formora-ui="2"] .ap-value-label { display: block; margin-bottom: 4px; color: var(--ap-amber); font-size: 10px; font-weight: 600; }
+#applypilot-root[data-formora-ui="2"] textarea, #applypilot-root[data-formora-ui="2"] select.ap-edit { display: block; width: 100%; margin: 10px 0 0; min-height: 38px; padding: 11px 12px; color: var(--ap-ink); background: #fbfcfd; border: 1px solid #cbd7df; border-radius: 8px; font-size: 13px; line-height: 1.65; box-shadow: none; text-align: left; }
+#applypilot-root[data-formora-ui="2"] textarea { min-height: 88px; max-height: 360px; resize: vertical; scrollbar-width: thin; }
+#applypilot-root[data-formora-ui="2"] textarea::placeholder { color: #78858e; }
+#applypilot-root[data-formora-ui="2"] .ap-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+#applypilot-root[data-formora-ui="2"] button.ap-locate { border-color: transparent; padding: 4px 0; min-height: 28px; background: transparent; color: var(--ap-muted); font-size: 11px; }
+#applypilot-root[data-formora-ui="2"] button.ap-locate:hover { color: var(--ap-ink); text-decoration: underline; }
+#applypilot-root[data-formora-ui="2"] button.ap-manual-action { color: var(--ap-amber); background: #fff6e5; border-color: #e7cca1; }
+#applypilot-root[data-formora-ui="2"] button.ap-manual-action:hover { background: #ffedcb; }
+#applypilot-root[data-formora-ui="2"] .ap-provenance { margin-left: auto; color: var(--ap-muted); font-size: 10px; }
+#applypilot-root[data-formora-ui="2"] .ap-foot { flex: none; display: flex; align-items: center; gap: 7px; padding: 12px 18px; border-top: 1px solid var(--ap-border); background: #fff; color: var(--ap-muted); font-size: 10px; }
+#applypilot-root[data-formora-ui="2"] .ap-foot > span { color: var(--ap-green); }
+#applypilot-root[data-formora-ui="2"] .ap-opts { margin-top: 8px; max-height: 72px; overflow: auto; }
+#applypilot-root[data-formora-ui="2"] .ap-checks { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow: auto; border: 1px solid var(--ap-border); border-radius: 8px; padding: 10px; }
+#applypilot-root[data-formora-ui="2"] .ap-checks label { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; }
+#applypilot-root[data-formora-ui="2"] .ap-checks input { margin: 0; width: 16px; height: 16px; accent-color: var(--ap-brand); }
+#applypilot-root[data-formora-ui="2"] .ap-empty, #applypilot-root[data-formora-ui="2"] .ap-filter-empty { padding: 28px 12px; text-align: center; color: var(--ap-muted); font-size: 13px; }
+#applypilot-root[data-formora-ui="2"] .ap-spin { width: 15px; height: 15px; border: 2px solid #c5d4dd; border-top-color: var(--ap-brand); border-radius: 50%; animation: ap-rot .8s linear infinite; flex: none; display: inline-block; }
+#applypilot-root[data-formora-ui="2"] .ap-spin-sm { width: 10px; height: 10px; }
+#applypilot-root[data-formora-ui="2"] .ap-shimmer { height: 10px; margin-top: 9px; border-radius: 4px; background: linear-gradient(90deg, #eef2f5 25%, #dce5ea 50%, #eef2f5 75%); background-size: 200% 100%; animation: ap-shine 1.2s linear infinite; }
+#applypilot-root[data-formora-ui="2"] .ap-shimmer-short { width: 60%; }
+#applypilot-root[data-formora-ui="2"] .ap-resize { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, #b7c7d0 50%, #b7c7d0 60%, transparent 60%, transparent 75%, #b7c7d0 75%, #b7c7d0 85%, transparent 85%); border-bottom-right-radius: 10px; }
+#applypilot-root[data-formora-ui="2"].ap-min :is(.ap-list, .ap-foot, .ap-change, .ap-resize, .ap-tools, .ap-actions, .ap-filters, .ap-progress) { display: none; }
+#applypilot-root[data-formora-ui="2"].ap-min .ap-panel { width: 300px; height: auto !important; min-height: 0; }
 @keyframes ap-rot { to { transform: rotate(360deg); } }
-#applypilot-root .ap-tools { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid #eee; background: #fafafa; }
-#applypilot-root .ap-tools[hidden] { display: none; }
-#applypilot-root .ap-tools button { border: 1px solid #1C3A4B; background: #1C3A4B; color: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
-#applypilot-root .ap-tools button:disabled { opacity: .6; cursor: wait; }
-#applypilot-root .ap-tools-note { font-size: 11px; color: #666; }
-#applypilot-root .ap-empty { padding: 24px 12px; text-align: center; color: #777; font-size: 12px; }
-#applypilot-root .ap-item.ap-pending { border-left: 4px solid #9DB4C0; }
-#applypilot-root .ap-badge.ap-wait { background: #E3EBEF; color: #1C3A4B; }
-#applypilot-root .ap-shimmer { height: 12px; border-radius: 4px; margin: 6px 0; background: linear-gradient(90deg, #f1f1f1 25%, #e2e2e2 50%, #f1f1f1 75%); background-size: 200% 100%; animation: ap-shine 1.2s linear infinite; }
-#applypilot-root .ap-shimmer-short { width: 60%; }
 @keyframes ap-shine { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-#applypilot-root .ap-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, #9DB4C0 50%, #9DB4C0 60%, transparent 60%, transparent 75%, #9DB4C0 75%, #9DB4C0 85%, transparent 85%); border-bottom-right-radius: 12px; }
-#applypilot-root .ap-panel { position: relative; min-width: 300px; min-height: 180px; }
-#applypilot-root.ap-min .ap-resize, #applypilot-root.ap-min .ap-tools { display: none; }
-#applypilot-root.ap-min .ap-panel { height: auto !important; min-height: 0; }
+@media (prefers-reduced-motion: reduce) { #applypilot-root[data-formora-ui="2"] *, #applypilot-root[data-formora-ui="2"] *::before, #applypilot-root[data-formora-ui="2"] *::after { animation: none !important; transition: none !important; } }
+@media (max-width: 380px) { #applypilot-root[data-formora-ui="2"] .ap-head, #applypilot-root[data-formora-ui="2"] .ap-status { padding: 12px; } #applypilot-root[data-formora-ui="2"] .ap-list { padding: 10px; } #applypilot-root[data-formora-ui="2"] .ap-filters { padding-inline: 10px; } #applypilot-root[data-formora-ui="2"] .ap-tools { flex-wrap: wrap; padding-inline: 12px; } }

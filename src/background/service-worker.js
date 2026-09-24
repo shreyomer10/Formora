@@ -283,7 +283,11 @@ chrome.storage.local.get(['ui']).then(({ ui }) => { if (ui && typeof ui.dark ===
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
-      if (msg.type === 'COLOR_SCHEME') { await setToolbarIcon(!!msg.dark); sendResponse({ ok: true }); }
+      if (msg.type === 'REFRESH_OVERLAY_STYLES' && _sender.tab?.id != null) {
+        await chrome.scripting.insertCSS({ target: { tabId: _sender.tab.id, frameIds: [_sender.frameId ?? 0] }, files: ['src/content/overlay.css'] });
+        sendResponse({ ok: true });
+      }
+      else if (msg.type === 'COLOR_SCHEME') { await setToolbarIcon(!!msg.dark); sendResponse({ ok: true }); }
       else if (msg.type === 'LLM_FILL') sendResponse({ ok: true, ...(await llmFill(msg.payload)) });
       else if (msg.type === 'EXTRACT_PROFILE') sendResponse({ ok: true, data: await extractProfile(msg.payload) });
       else if (msg.type === 'TEST_KEY') {
@@ -308,6 +312,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 async function sendToActiveTab(type) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id) return;
+  // Refresh styles even when a content script already exists in an older tab.
+  await chrome.scripting.insertCSS({ target: { tabId: tab.id, allFrames: true }, files: ['src/content/overlay.css'] });
   try {
     await chrome.tabs.sendMessage(tab.id, { type });
   } catch {
@@ -316,7 +322,6 @@ async function sendToActiveTab(type) {
       target: { tabId: tab.id, allFrames: true },
       files: ['src/lib/rules.js', 'src/content/util.js', 'src/content/extractor.js', 'src/content/sections.js', 'src/content/gforms.js', 'src/content/filler.js', 'src/content/overlay.js', 'src/content/main.js'],
     });
-    await chrome.scripting.insertCSS({ target: { tabId: tab.id, allFrames: true }, files: ['src/content/overlay.css'] });
     await chrome.tabs.sendMessage(tab.id, { type });
   }
 }
