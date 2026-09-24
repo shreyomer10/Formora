@@ -38,6 +38,7 @@
   function key(el, keyName, code, keyCode) {
     const init = { key: keyName, code, keyCode, which: keyCode, bubbles: true, cancelable: true, composed: true };
     el.dispatchEvent(new KeyboardEvent('keydown', init));
+    el.dispatchEvent(new KeyboardEvent('keypress', init));
     el.dispatchEvent(new KeyboardEvent('keyup', init));
   }
 
@@ -83,15 +84,74 @@
     el.blur();
   }
 
+  // Accepts "YYYY-MM-DD", "YYYY-MM", "MM/YYYY", "MM/DD/YYYY", "Jun 2023", "2023"; returns {y, m, d} or null.
+  JAF.parseDate = function (value) {
+    const s = String(value || '').trim();
+    let m;
+    if ((m = s.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/))) return { y: m[1], m: m[2].padStart(2, '0'), d: m[3] ? m[3].padStart(2, '0') : '' };
+    if ((m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/))) {
+      // DD/MM/YYYY is the common form outside the US; treat the first number as the day when it cannot be a month.
+      const a = +m[1], b = +m[2];
+      const [d, mo] = a > 12 ? [m[1], m[2]] : b > 12 ? [m[2], m[1]] : [m[1], m[2]];
+      return { y: m[3], m: String(mo).padStart(2, '0'), d: String(d).padStart(2, '0') };
+    }
+    if ((m = s.match(/^(\d{1,2})[\/.-](\d{4})$/))) return { y: m[2], m: m[1].padStart(2, '0'), d: '' };
+    if ((m = s.match(/^([a-z]{3,9})\.?\s+(\d{4})$/i))) {
+      const mi = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(m[1].slice(0, 3).toLowerCase());
+      if (mi >= 0) return { y: m[2], m: String(mi + 1).padStart(2, '0'), d: '' };
+    }
+    if ((m = s.match(/^(\d{4})$/))) return { y: m[1], m: '', d: '' };
+    return null;
+  };
+
   function formatDate(value, el) {
-    const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!m) return value;
-    const [, y, mo, d] = m;
-    if (el.type === 'date') return value;
+    const p = JAF.parseDate(value);
+    if (!p) return value;
+    const { y, m: mo, d } = p;
+    if (el.type === 'date') return d ? `${y}-${mo}-${d}` : value;
+    if (el.type === 'month') return mo ? `${y}-${mo}` : value;
     const hint = ((el.getAttribute('placeholder') || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
+    if (!d || /^mm\s*[\/\-.]\s*yyyy/.test(hint)) return mo ? (/yyyy\s*[\/\-.]\s*mm/.test(hint) ? `${y}-${mo}` : `${mo}/${y}`) : y;
     if (/mm\s*[\/\-.]\s*dd/.test(hint)) return `${mo}/${d}/${y}`;
     if (/yyyy\s*[\/\-.]\s*mm/.test(hint)) return `${y}-${mo}-${d}`;
     return `${d}/${mo}/${y}`;
+  }
+
+  // Segmented date widget: one box each for month / day / year.
+  async function fillDateParts(entry, value) {
+    const p = JAF.parseDate(value);
+    if (!p) return { ok: false, note: `could not read a date from "${value}"` };
+    const wanted = { month: p.m, day: p.d, year: p.y };
+    const set = [];
+    const missed = [];
+    const same = (a, b) => String(a || '').replace(/^0+/, '') === String(b || '').replace(/^0+/, '');
+    for (const part of ['month', 'day', 'year']) {
+      const el = entry.parts[part];
+      const v = wanted[part];
+      if (!el || !v) continue;
+      if (el.tagName === 'INPUT') {
+        JAF.setNativeValue(el, v);
+        await JAF.sleep(40);
+        if (!same(el.value, v)) { // React reset it: type it key by key
+          el.focus();
+          typeInto(el, '');
+          for (const ch of v) { key(el, ch, `Digit${ch}`, 48 + Number(ch)); typeInto(el, (el.value || '') + ch); }
+          fire(el, ['change']);
+          el.blur();
+        }
+        (same(el.value, v) ? set : missed).push(part);
+      } else {
+        // role=spinbutton div: type the digits, then check aria-valuenow / text
+        el.focus();
+        for (const ch of v) key(el, ch, `Digit${ch}`, 48 + Number(ch));
+        await JAF.sleep(40);
+        const shown = el.getAttribute('aria-valuenow') || JAF.text(el);
+        (same(shown, v) ? set : missed).push(part);
+      }
+    }
+    if (!set.length) return { ok: false, note: `date boxes did not accept "${value}"; type it manually` };
+    if (missed.length) return { ok: true, note: `set ${set.join('/')}, could not set ${missed.join('/')}` };
+    return { ok: true, note: `set ${set.join('/')}` };
   }
 
   // ---- radios / checkboxes -------------------------------------------------
@@ -138,8 +198,9 @@
   }
 
   // ---- dropdowns -----------------------------------------------------------
-  const OPTION_SEL = '[role="option"], [role="menuitem"], [role="menuitemradio"], [role="listbox"] li, [role="listbox"] > div';
-  const PLACEHOLDER_RE = /^(select|choose|please select|no options|no results|nothing found|loading|searching|type to search|--+|-)/i;
+  const OPTION_SEL = '[role="option"], [role="menuitem"], [role="menuitemradio"], [role="listbox"] li, [role="listbox"] > div, [data-automation-id="promptOption"], [data-automation-id="menuItem"], [data-automation-id="promptLeafNode"]';
+  const TYPEAHEAD_SEL = '[data-automation-id*="search" i], [data-automation-id*="select" i], [data-uxi-widget-type*="select" i], [data-automation-id*="prompt" i], [class*="typeahead" i], [class*="autocomplete" i], [class*="react-select" i]';
+  const PLACEHOLDER_RE = /^(select|choose|please select|no options|no results|no items|no matches|nothing found|loading|searching|search|type to search|start typing|partial list|show (all|more)|view all|see all|more results|all$|--+|-)/i;
 
   function inOverlay(el) {
     return !!JAF.closestAcrossShadow(el, '#applypilot-root');
@@ -238,18 +299,107 @@
     return `${own || ''} ${around || ''}`;
   }
 
-  async function pickVisible(el, target) {
-    const pick = JAF.bestOption(target, toOptions(visibleOptionEls(el)));
+  // Wait until the popup shows real options (typeaheads load them from the server after a debounce).
+  async function waitForOptions(el, ms = 1800, exclude = null) {
+    const opts = await JAF.waitFor(() => {
+      const o = toOptions(visibleOptionEls(el).filter((x) => !exclude || !exclude.has(x)));
+      return o.length ? o : null;
+    }, ms, 150);
+    return opts || [];
+  }
+
+  // Enter is safe to send when it cannot submit a form: no <form> ancestor, or the input is a widget.
+  function enterIsSafe(el) {
+    return !el.form || el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-autocomplete') || !!el.closest(TYPEAHEAD_SEL);
+  }
+
+  // Type a query and return the suggestions it produced. Sites like Workday only run the search
+  // when Enter is pressed, so when typing alone shows nothing we press Enter and wait for the
+  // server round trip. `exclude` holds option nodes that were visible before, so a stale list
+  // from the previous query never counts as a result for this one.
+  async function searchOptions(el, query, exclude) {
+    typeInto(el, query);
+    let opts = await waitForOptions(el, 700, exclude);
+    if (!opts.length && enterIsSafe(el)) {
+      key(el, 'Enter', 'Enter', 13);
+      opts = await waitForOptions(el, 3500, exclude);
+    }
+    return opts;
+  }
+
+  // The site's top result for a query, if it plausibly relates to it (shares a 3-letter token prefix).
+  function closestResult(query, opts) {
+    if (!opts.length) return null;
+    const norm = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const toks = norm(query).split(' ').filter((t) => t.length >= 2);
+    const first = opts[0];
+    const l = norm(first.label);
+    return toks.some((t) => l.includes(t.slice(0, 3))) ? first : null;
+  }
+
+  async function pickVisible(el, target, wait = 0) {
+    const opts = wait ? await waitForOptions(el, wait) : toOptions(visibleOptionEls(el));
+    const pick = JAF.bestOption(target, opts);
     if (!pick) return null;
     click(pick.el);
     await JAF.sleep(200);
     return pick;
   }
 
+  // The element that shows selected chips for a multi-value typeahead (skills).
+  function chipBox(el) {
+    return el.closest('[data-automation-id*="multiselect" i], [aria-multiselectable="true"], [class*="multi" i][class*="select" i]') || (el.parentElement && el.parentElement.parentElement) || el.parentElement;
+  }
+
+  // Skills-style field: type each value, pick the suggestion, repeat. Reports what stuck.
+  async function fillMulti(entry, el, values) {
+    const box = chipBox(el);
+    const added = [];
+    const missing = [];
+    for (const raw of values) {
+      const v = String(raw).trim();
+      if (!v) continue;
+      if (box && !el.value && JAF.text(box).toLowerCase().includes(v.toLowerCase())) { added.push(v); continue; } // already a chip
+      el.focus();
+      const stale = new Set(visibleOptionEls(el));
+      let opts = await searchOptions(el, v, stale);
+      let pick = JAF.bestOption(v, opts);
+      if (!pick && v.includes(' ')) {
+        const first = v.split(/[\s(,/]+/)[0];
+        const stale2 = new Set(visibleOptionEls(el));
+        const more = await searchOptions(el, first, stale2);
+        pick = JAF.bestOption(v, more);
+        if (!opts.length) opts = more;
+      }
+      let approx = false;
+      if (!pick) { pick = closestResult(v, opts); approx = !!pick; }
+      if (pick) {
+        click(pick.el);
+        await JAF.sleep(300);
+        added.push(approx && !JAF.fuzzyEq(pick.label, v) ? `${pick.label} (closest to "${v}")` : pick.label);
+      } else if (box && JAF.text(box).toLowerCase().includes(v.toLowerCase()) && !el.value) {
+        added.push(v); // the site accepted the free value on Enter
+      } else {
+        missing.push(v);
+      }
+      if (el.value) typeInto(el, '');
+      if (el.disabled || !el.isConnected) break;
+    }
+    el.blur();
+    fire(el, ['blur', 'focusout']);
+    if (!added.length) return { ok: false, note: `no suggestions matched ${missing.map((m) => `"${m}"`).join(', ')}; add them manually` };
+    const note = `added ${added.join(', ')}` + (missing.length ? `; not found: ${missing.join(', ')}` : '');
+    return { ok: true, note };
+  }
+
   // Select `value` in any dropdown-like control: react-select style inputs, Workday
   // buttons, ARIA comboboxes, plain typeahead inputs.
-  async function fillDropdown(entry, el, value) {
+  async function fillDropdown(entry, el, value, q) {
     const typable = isTypable(el);
+    const multi = !!(q && q.meta && q.meta.multi);
+    const values = Array.isArray(value) ? value : multi ? String(value).split(/\s*[,;|\n]\s*/).filter(Boolean) : [String(value)];
+    if (typable && (values.length > 1 || (multi && values.length === 1))) return await fillMulti(entry, el, values);
+    value = values[0] ?? '';
     const known = entry.options && entry.options.length ? (JAF.bestOption(value, entry.options) || JAF.rangeOption(value, entry.options)) : null;
     const target = known ? known.label : String(value);
 
@@ -258,18 +408,20 @@
     let pick = await pickVisible(el, target);
 
     if (!pick && typable) {
-      // Type to filter (also triggers async option loading), then look again.
-      typeInto(el, target);
-      await JAF.sleep(500);
-      pick = await pickVisible(el, target);
+      // Type to filter (also triggers async option loading, or a search on Enter), then look again.
+      const stale = new Set(visibleOptionEls(el));
+      let opts = await searchOptions(el, target, stale);
+      pick = JAF.bestOption(target, opts);
       if (!pick) {
         const shorter = target.split(/[\s(,/]+/)[0];
         if (shorter && shorter.length >= 2 && shorter !== target) {
-          typeInto(el, shorter);
-          await JAF.sleep(500);
-          pick = await pickVisible(el, target);
+          const more = await searchOptions(el, shorter, new Set(visibleOptionEls(el)));
+          pick = JAF.bestOption(target, more);
+          if (!opts.length) opts = more;
         }
       }
+      if (!pick) pick = closestResult(target, opts);
+      if (pick) { click(pick.el); await JAF.sleep(200); }
     }
 
     if (pick) {
@@ -324,7 +476,25 @@
       return { ok: false, note: 'browser blocked programmatic file set' };
     }
     fire(el, ['input', 'change']);
-    return { ok: true, note: file.name };
+    // Verify the page took it: the file name should now appear near the input.
+    const zone = el.closest('[data-automation-id*="file" i], [class*="upload" i], [class*="dropzone" i], [class*="drop-zone" i], [class*="file" i], [class*="attach" i]') || el.parentElement;
+    const shows = () => {
+      const scope = zone && zone.parentElement ? zone.parentElement : document.body;
+      return JAF.text(scope).toLowerCase().includes(file.name.toLowerCase().slice(0, 20));
+    };
+    let shown = await JAF.waitFor(shows, 800, 100);
+    if (!shown && zone) {
+      // Drop zones (Workday, Greenhouse) listen for a drop event rather than the input's change.
+      try {
+        const init = { bubbles: true, cancelable: true, composed: true, dataTransfer: dt };
+        zone.dispatchEvent(new DragEvent('dragenter', init));
+        zone.dispatchEvent(new DragEvent('dragover', init));
+        zone.dispatchEvent(new DragEvent('drop', init));
+        shown = await JAF.waitFor(shows, 1200, 100);
+      } catch { /* DragEvent not constructible */ }
+    }
+    if (shown) return { ok: true, note: `attached ${file.name}` };
+    return { ok: true, note: `set ${file.name}, but the page does not show it yet; check before submitting` };
   }
 
   // Map wanted strings onto group options. A comma-joined answer ("Go, Docker") is
@@ -375,6 +545,7 @@
       }
 
       if (entry.kind === 'gforms-listbox') return await fillGFormsListbox(entry, value);
+      if (entry.kind === 'dateparts') return await fillDateParts(entry, Array.isArray(value) ? value[0] : value);
 
       const el = entry.el;
       const v = Array.isArray(value) ? value.join(', ') : String(value ?? '');
@@ -405,13 +576,19 @@
           return { ok: true, note: `picked "${best.label}"` };
         }
         case 'combobox':
-          return await fillDropdown(entry, el, v);
+          return await fillDropdown(entry, el, Array.isArray(value) ? value : v, q);
         case 'date':
           JAF.setNativeValue(el, formatDate(v, el));
           return { ok: true };
         default:
-          if (el.isContentEditable || (el.getAttribute('role') === 'textbox' && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) setEditable(el, v);
-          else JAF.setNativeValue(el, /^\d{4}-\d{2}-\d{2}$/.test(v) ? formatDate(v, el) : v);
+          if (el.isContentEditable || (el.getAttribute('role') === 'textbox' && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) { setEditable(el, v); return { ok: true }; }
+          JAF.setNativeValue(el, /^\d{4}-\d{2}(-\d{2})?$/.test(v) ? formatDate(v, el) : v);
+          await JAF.sleep(60);
+          if (el.tagName === 'INPUT' && v && !el.value) {
+            // A controlled input that wiped the value only accepts a picked suggestion: treat it as a typeahead.
+            const r = await fillDropdown(entry, el, v, q);
+            return r.ok ? r : { ok: false, note: `page rejected typed text; ${r.note}` };
+          }
           return { ok: true };
       }
     } catch (e) {

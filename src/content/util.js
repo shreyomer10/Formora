@@ -12,8 +12,9 @@
     if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
-    // Honeypots are usually pushed far off-screen.
-    if (r.right < -1000 || r.bottom < -1000) return false;
+    // Honeypots are usually pushed far off-page (left: -9999px). Use document coordinates so an
+    // element that is merely scrolled out of the viewport still counts as visible.
+    if (r.right + window.scrollX < -1000 || r.bottom + window.scrollY < -1000) return false;
     return true;
   };
 
@@ -83,7 +84,11 @@
       const score = ot.filter((t) => vt.has(t)).length / ot.length;
       if (score > bestScore) { bestScore = score; best = o; }
     }
-    return bestScore >= 0.5 ? best : null;
+    if (bestScore >= 0.5) return best;
+    // "B.Tech" against "Bachelor of Technology": expand the abbreviation and retry once.
+    const alias = JAF.aliasOf ? JAF.aliasOf(value) : null;
+    if (alias && alias !== v) return JAF.bestOption(alias, options);
+    return null;
   };
 
   // For numeric values against range-style options ("0-1", "1-3 years", "3 to 5", "5+", "less than 1",
@@ -107,6 +112,51 @@
       if (inRange && (!best || hi - lo < best.span)) best = { o, span: hi - lo };
     }
     return best ? best.o : null;
+  };
+
+  // Poll `fn` until it returns a truthy value or `ms` elapses.
+  JAF.waitFor = async function (fn, ms = 1500, step = 120) {
+    const end = Date.now() + ms;
+    for (;;) {
+      let v;
+      try { v = fn(); } catch { v = null; }
+      if (v) return v;
+      if (Date.now() >= end) return null;
+      await JAF.sleep(step);
+    }
+  };
+
+  // Common abbreviations that dropdowns spell out ("B.Tech" -> "Bachelor of Technology").
+  JAF.ALIASES = {
+    'b tech': 'bachelor of technology', 'btech': 'bachelor of technology', 'b e': 'bachelor of engineering', 'be': 'bachelor of engineering',
+    'b sc': 'bachelor of science', 'bsc': 'bachelor of science', 'b a': 'bachelor of arts', 'ba': 'bachelor of arts', 'b com': 'bachelor of commerce', 'bcom': 'bachelor of commerce',
+    'bca': 'bachelor of computer application', 'bba': 'bachelor of business administration', 'b arch': 'bachelor of architecture', 'llb': 'bachelor of law', 'mbbs': 'bachelor of medicine',
+    'm tech': 'master of technology', 'mtech': 'master of technology', 'm e': 'master of engineering', 'me': 'master of engineering', 'm sc': 'master of science', 'msc': 'master of science', 'ms': 'master of science',
+    'm a': 'master of arts', 'ma': 'master of arts', 'mba': 'master of business administration', 'mca': 'master of computer application', 'm com': 'master of commerce', 'mcom': 'master of commerce',
+    'phd': 'doctor of philosophy', 'ph d': 'doctor of philosophy', 'doctorate': 'doctor of philosophy', 'hs': 'high school', 'hsc': 'higher secondary', 'ssc': 'secondary',
+  };
+  JAF.aliasOf = (value) => JAF.ALIASES[norm(value)] || null;
+
+  // Heading-like elements that introduce a section or a repeated entry ("Work Experience 1").
+  JAF.HEADING_SEL = 'h1, h2, h3, h4, h5, h6, [role="heading"], legend';
+
+  // Headings that come before `el` in document order, nearest first. Walks up the
+  // ancestors until one holds at least one preceding heading, so a field inside an
+  // entry block sees "Education 1" before "Education".
+  JAF.precedingHeadings = function (el, selector = JAF.HEADING_SEL, maxDepth = 12) {
+    let node = el && el.parentElement;
+    for (let depth = 0; node && depth < maxDepth; depth++) {
+      if (node instanceof Element) {
+        if (node.matches('body, html')) break;
+        const hs = Array.from(node.querySelectorAll(selector))
+          .filter((h) => h !== el && !h.contains(el) && !el.contains(h) && (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))
+          .filter((h) => JAF.text(h));
+        if (hs.length) return hs.reverse();
+      }
+      const root = node.getRootNode && node.getRootNode();
+      node = node.parentElement || (root && root.host) || null;
+    }
+    return [];
   };
 
   JAF.log = (...a) => console.log('%c[ApplyPilot]', 'color:#7c3aed;font-weight:bold', ...a);

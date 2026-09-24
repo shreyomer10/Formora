@@ -1,5 +1,5 @@
 const status = document.getElementById('status');
-const FILES = ['src/lib/rules.js', 'src/content/util.js', 'src/content/extractor.js', 'src/content/gforms.js', 'src/content/filler.js', 'src/content/overlay.js', 'src/content/main.js'];
+const FILES = ['src/lib/rules.js', 'src/content/util.js', 'src/content/extractor.js', 'src/content/sections.js', 'src/content/gforms.js', 'src/content/filler.js', 'src/content/overlay.js', 'src/content/main.js'];
 
 async function send(type) {
   status.textContent = 'Working...';

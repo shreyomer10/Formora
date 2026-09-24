@@ -1,10 +1,14 @@
-// Orchestrator: extract -> deterministic fill -> memory -> one LLM call -> apply -> review panel.
+// Orchestrator: prepare repeatable sections -> extract -> deterministic fill -> memory ->
+// one LLM call -> apply -> review panel. Then watch for the next step of the application.
 (function () {
   const JAF = window.JAF;
   if (JAF.__mainLoaded) return;
   JAF.__mainLoaded = true;
 
   const JOB_SPECIFIC = /\b(why|this (role|position|company|job|opportunity)|our (company|team)|about us|cover letter|motivat|interest(ed)? in)\b/i;
+  const NOT_RESUME = /\b(cover letter|photo|picture|transcript|certificate|certification|portfolio|id proof|passport|attachment)\b/i;
+  const ACTIVE_KEY = 'applypilot.active';
+  const isTop = window === window.top;
 
   function haystack(q) {
     return [q.label, q.meta?.name, q.meta?.idAttr, q.meta?.placeholder, q.meta?.autocomplete].filter(Boolean).join(' | ').toLowerCase();
@@ -14,6 +18,20 @@
     if (key === 'fullName') return profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(' ');
     if (key === 'firstName' && !profile.firstName && profile.fullName) return profile.fullName.split(' ')[0];
     if (key === 'lastName' && !profile.lastName && profile.fullName) return profile.fullName.split(' ').slice(1).join(' ');
+    // Fall back to the first education entry when the flat field is empty.
+    const edu = Array.isArray(profile.education) && profile.education[0];
+    if (edu) {
+      if (key === 'college' && !profile.college) return edu.school || '';
+      if (key === 'degree' && !profile.degree) return edu.degree || '';
+      if (key === 'branch' && !profile.branch) return edu.field || '';
+      if (key === 'cgpa' && !profile.cgpa) return edu.gpa || '';
+      if (key === 'graduationYear' && !profile.graduationYear) return (JAF.parseDate(edu.endDate) || {}).y || '';
+    }
+    const job = Array.isArray(profile.workExperience) && profile.workExperience[0];
+    if (job) {
+      if (key === 'currentCompany' && !profile.currentCompany) return job.company || '';
+      if (key === 'currentTitle' && !profile.currentTitle) return job.title || '';
+    }
     return profile[key] || '';
   }
 
@@ -45,7 +63,12 @@
     // type-only fallbacks
     if (q.type === 'email' && profile.email) return { value: profile.email, key: 'email' };
     if (q.type === 'tel' && profile.phone) return { value: profile.phone, key: 'phone' };
-    if (q.type === 'file' && resume && resume.base64 && /resume|cv/i.test(h + ' ' + (q.meta?.accept || ''))) return { value: '__resume', key: '__resume' };
+    if (q.type === 'file' && resume && resume.base64) {
+      const sec = String(q.meta?.section || '').toLowerCase();
+      if (/resume|cv/i.test(h + ' ' + (q.meta?.accept || '') + ' ' + sec)) return { value: '__resume', key: '__resume' };
+      // The only upload on the page, not labelled as something else: that is the resume slot.
+      if (q.meta?.onlyFile && !NOT_RESUME.test(h + ' ' + sec)) return { value: '__resume', key: '__resume' };
+    }
     return null;
   }
 
@@ -59,19 +82,82 @@
 
   async function saveMemory(memory, q, value, url) {
     const key = JAF.normalizeLabel(q.label);
-    if (!key || q.type === 'file') return;
+    if (!key || q.type === 'file' || q.meta?.entry) return;
     memory[key] = { label: q.label, type: q.type, answer: value, url, ts: Date.now() };
     await chrome.storage.local.set({ memory });
   }
 
+  // ---- multi-step watcher ------------------------------------------------------
+  let watchTimer = null;
+  let baseline = null;
+  let lastSeen = null;
+  let stableTicks = 0;
+  let steps = 0;
+
+  function setActive(on) { try { if (on) sessionStorage.setItem(ACTIVE_KEY, '1'); else sessionStorage.removeItem(ACTIVE_KEY); } catch { /* blocked */ } }
+  function isActive() { try { return sessionStorage.getItem(ACTIVE_KEY) === '1'; } catch { return false; } }
+
+  JAF.markSeen = function () { baseline = JAF.formFingerprint(); lastSeen = baseline; stableTicks = 0; };
+
+  JAF.startWatch = function () {
+    if (!isTop) return;
+    setActive(true);
+    JAF.markSeen();
+    if (watchTimer) return;
+    watchTimer = setInterval(() => {
+      if (JAF.running || !document.getElementById('applypilot-root')) return;
+      const fp = JAF.formFingerprint();
+      // Compare with the last announced state, so one new step is announced once, not every tick.
+      const changed = fp.url !== baseline.url || fp.unknown !== baseline.unknown || Math.abs(fp.count - baseline.count) > 2;
+      if (!changed) { lastSeen = fp; stableTicks = 0; return; }
+      // Wait for the DOM to settle (SPA transitions render in pieces) before announcing the step.
+      const sameAsLast = lastSeen && fp.url === lastSeen.url && fp.count === lastSeen.count && fp.unknown === lastSeen.unknown;
+      lastSeen = fp;
+      stableTicks = sameAsLast ? stableTicks + 1 : 0;
+      if (stableTicks < 2) return;
+      baseline = fp;
+      if (fp.count > 0) JAF.overlay.pageChanged(fp);
+      else JAF.overlay.status('Page changed; no form fields found yet.');
+    }, 700);
+  };
+
+  JAF.stopWatch = function () {
+    if (watchTimer) clearInterval(watchTimer);
+    watchTimer = null;
+    setActive(false);
+  };
+
+  // ---- run ---------------------------------------------------------------------
   JAF.run = async function ({ mode = 'fill' } = {}) {
+    if (JAF.running) return { questions: [] };
+    JAF.running = true;
+    try {
+      return await runInner(mode);
+    } finally {
+      JAF.running = false;
+      if (isTop) JAF.startWatch();
+    }
+  };
+
+  async function runInner(mode) {
+    const { profile, resume, settings, memory } = await loadState();
+    const results = [];
+    steps += 1;
+    if (isTop) JAF.overlay.setStep(steps);
+
+    if (mode === 'fill' && !JAF.isGForms()) {
+      if (isTop) JAF.overlay.status('Checking for Work Experience / Education / Certification sections...');
+      const notes = await JAF.prepareSections(profile);
+      notes.forEach((n) => results.push({ source: 'info', note: n.text }));
+    }
+
     const questions = JAF.isGForms() ? JAF.extractGForms() : JAF.extractGeneric();
     if (!questions.length) {
-      if (window === window.top) JAF.overlay.status('No form fields found on this page.');
+      if (isTop) JAF.overlay.status('No form fields found on this page.');
       return { questions: [] };
     }
-    JAF.log('extracted', questions);
-    if (questions.some((q) => q.type === 'combobox' && !q.options.length && !q.currentValue)) {
+    JAF.log('extracted', questions.length, questions.map((q) => `${q.label} [${q.type}${q.meta?.entry ? ' ' + q.meta.entry.kind + q.meta.entry.index : ''}]`).join(' | '));
+    if (questions.some((q) => q.type === 'combobox' && !q.options.length && !q.currentValue && !q.meta?.multi)) {
       JAF.overlay.status(`Found ${questions.length} question(s). Reading dropdown options...`);
       const n = await JAF.discoverOptions(questions);
       if (n) JAF.log('discovered options for', n, 'dropdown(s)');
@@ -82,14 +168,24 @@
       return { questions };
     }
 
-    const { profile, resume, settings, memory } = await loadState();
-    const results = [];
     const pending = [];
 
     JAF.overlay.status(`Found ${questions.length} question(s). Filling profile fields...`);
     for (const q of questions) {
       if (q.currentValue && q.type !== 'file' && !settings.overwrite) { results.push({ q, source: 'skip', value: q.currentValue, note: 'already filled' }); continue; }
-      const m = matchRule(q, profile, resume);
+
+      // Fields inside a repeated block (Work Experience 2) come from that profile entry only.
+      const sv = JAF.sectionValue(q, profile);
+      if (sv && sv.skip) { results.push({ q, source: 'skip', value: '', note: sv.note }); continue; }
+      if (sv) {
+        const res = await JAF.fill(q, sv.value, resume);
+        results.push({ q, source: res.ok ? 'profile' : 'fail', value: sv.value, note: res.note });
+        if (res.ok) JAF.highlight(q, '#16a34a');
+        continue;
+      }
+      const hasEntry = q.meta?.entry && Array.isArray(profile[{ work: 'workExperience', education: 'education', certification: 'certifications' }[q.meta.entry.kind]]) &&
+        profile[{ work: 'workExperience', education: 'education', certification: 'certifications' }[q.meta.entry.kind]][q.meta.entry.index - 1];
+      const m = hasEntry ? null : matchRule(q, profile, resume);
       if (m) {
         const res = await JAF.fill(q, m.value, resume);
         results.push({ q, source: res.ok ? 'profile' : 'fail', value: m.value === '__resume' ? (resume.fileName || 'resume') : m.value, note: res.note });
@@ -97,7 +193,7 @@
         continue;
       }
       const mem = memory[JAF.normalizeLabel(q.label)];
-      if (mem && mem.type === q.type && !JOB_SPECIFIC.test(q.label) && (!q.options.length || JAF.bestOption(Array.isArray(mem.answer) ? mem.answer[0] : mem.answer, q.options.map((o) => ({ label: o, value: o }))))) {
+      if (mem && !q.meta?.entry && mem.type === q.type && !JOB_SPECIFIC.test(q.label) && (!q.options.length || JAF.bestOption(Array.isArray(mem.answer) ? mem.answer[0] : mem.answer, q.options.map((o) => ({ label: o, value: o }))))) {
         const res = await JAF.fill(q, mem.answer, resume);
         results.push({ q, source: res.ok ? 'memory' : 'fail', value: mem.answer, note: res.note || 'reused a previous answer' });
         if (res.ok) JAF.highlight(q, '#16a34a');
@@ -117,7 +213,10 @@
         const resp = await chrome.runtime.sendMessage({
           type: 'LLM_FILL',
           payload: {
-            questions: pending.map((q) => ({ id: q.id, label: q.label, type: q.type, options: q.options, required: q.required, maxLength: q.meta?.maxLength || null, optionsPartial: !!q.meta?.optionsPartial })),
+            questions: pending.map((q) => ({
+              id: q.id, label: q.label, type: q.type, options: q.options, required: q.required, maxLength: q.meta?.maxLength || null,
+              optionsPartial: !!q.meta?.optionsPartial, section: q.meta?.section || '', entry: q.meta?.entry || null, multi: !!q.meta?.multi,
+            })),
             page: JAF.pageContext(),
             previousAnswers: hints,
           },
@@ -125,11 +224,14 @@
         if (!resp || !resp.ok) {
           pending.forEach((q) => results.push({ q, source: 'fail', value: '', note: (resp && resp.error) || 'LLM call failed' }));
         } else {
+          if (resp.fallbackNote) results.push({ source: 'info', note: resp.fallbackNote });
           const byId = new Map((resp.answers || []).map((a) => [a.id, a]));
           for (const q of pending) {
             const a = byId.get(q.id);
             if (!a || a.skip) { results.push({ q, source: 'skip', value: '', note: (a && a.note) || 'model had no grounded answer' }); continue; }
             const value = q.type === 'checkbox' ? (a.values && a.values.length ? a.values : [a.value]).filter(Boolean) : a.value;
+            if (q.type === 'checkbox' && !value.length) { results.push({ q, source: 'skip', value: '', note: a.note || 'left unticked' }); continue; }
+            if (!q.type.match(/checkbox/) && !String(value || '').trim()) { results.push({ q, source: 'skip', value: '', note: a.note || 'model returned nothing' }); continue; }
             const res = await JAF.fill(q, value, resume);
             results.push({ q, source: res.ok ? 'ai' : 'fail', value, note: res.note || a.note || '' });
             if (res.ok) { JAF.highlight(q, '#7c3aed'); await saveMemory(memory, q, value, location.href); }
@@ -142,7 +244,7 @@
     JAF.overlay.render(results, reapply);
     JAF.overlay.status(`Filled ${(counts.profile || 0) + (counts.memory || 0) + (counts.ai || 0)} of ${questions.length}. profile ${counts.profile || 0} · memory ${counts.memory || 0} · ai ${counts.ai || 0} · skipped ${counts.skip || 0} · failed ${counts.fail || 0}`);
     return { questions, results };
-  };
+  }
 
   async function reapply(q, value) {
     const { resume, memory } = await loadState();
@@ -159,4 +261,11 @@
       return true;
     }
   });
+
+  // After a full page load inside an application the user already started, come back up
+  // in a compact state so the next step is one click away.
+  if (isTop && isActive()) {
+    const boot = () => { JAF.overlay.ready(); JAF.startWatch(); };
+    if (document.readyState === 'complete') setTimeout(boot, 300); else window.addEventListener('load', () => setTimeout(boot, 300), { once: true });
+  }
 })();

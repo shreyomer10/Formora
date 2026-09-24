@@ -4,6 +4,10 @@
 
 const API_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
+// Tried in order when the chosen model is overloaded (503), rate limited (429) or down (5xx).
+const DEFAULT_FALLBACKS = ['gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'];
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const FILL_SCHEMA = {
   type: 'object',
@@ -28,6 +32,32 @@ const FILL_SCHEMA = {
   additionalProperties: false,
 };
 
+const WORK_ITEM = {
+  type: 'object',
+  properties: {
+    title: { type: 'string' }, company: { type: 'string' }, location: { type: 'string' },
+    startDate: { type: 'string', description: 'YYYY-MM' }, endDate: { type: 'string', description: 'YYYY-MM, empty when current' },
+    current: { type: 'boolean' }, description: { type: 'string', description: '2-4 plain sentences of what was done, from the resume' },
+  },
+  required: ['title', 'company', 'location', 'startDate', 'endDate', 'current', 'description'],
+  additionalProperties: false,
+};
+const EDU_ITEM = {
+  type: 'object',
+  properties: {
+    school: { type: 'string' }, degree: { type: 'string', description: 'Full degree name, e.g. Bachelor of Technology' }, field: { type: 'string' },
+    startDate: { type: 'string', description: 'YYYY-MM or YYYY' }, endDate: { type: 'string', description: 'YYYY-MM or YYYY (expected if ongoing)' }, gpa: { type: 'string' },
+  },
+  required: ['school', 'degree', 'field', 'startDate', 'endDate', 'gpa'],
+  additionalProperties: false,
+};
+const CERT_ITEM = {
+  type: 'object',
+  properties: { name: { type: 'string' }, issuer: { type: 'string' }, number: { type: 'string' }, issued: { type: 'string', description: 'YYYY-MM' }, expires: { type: 'string' } },
+  required: ['name', 'issuer', 'number', 'issued', 'expires'],
+  additionalProperties: false,
+};
+
 const PROFILE_SCHEMA = {
   type: 'object',
   properties: {
@@ -41,8 +71,11 @@ const PROFILE_SCHEMA = {
         currentCompany: { type: 'string' }, currentTitle: { type: 'string' }, totalExperienceYears: { type: 'string' },
         skills: { type: 'string', description: 'Comma separated' },
         college: { type: 'string' }, degree: { type: 'string' }, branch: { type: 'string' }, graduationYear: { type: 'string' }, cgpa: { type: 'string' },
+        workExperience: { type: 'array', items: WORK_ITEM, description: 'Most recent first. Internships count.' },
+        education: { type: 'array', items: EDU_ITEM, description: 'Most recent first.' },
+        certifications: { type: 'array', items: CERT_ITEM },
       },
-      required: ['firstName', 'lastName', 'email', 'phone', 'city', 'state', 'country', 'linkedin', 'github', 'portfolio', 'currentCompany', 'currentTitle', 'totalExperienceYears', 'skills', 'college', 'degree', 'branch', 'graduationYear', 'cgpa'],
+      required: ['firstName', 'lastName', 'email', 'phone', 'city', 'state', 'country', 'linkedin', 'github', 'portfolio', 'currentCompany', 'currentTitle', 'totalExperienceYears', 'skills', 'college', 'degree', 'branch', 'graduationYear', 'cgpa', 'workExperience', 'education', 'certifications'],
       additionalProperties: false,
     },
   },
@@ -56,6 +89,7 @@ Choosing options:
 - "select", "radio": put exactly one option in "value", copied character for character from the options list. Never write text that is not in the list. Pick the option that matches the candidate's facts; if nothing fits and the question is required, pick the most reasonable or neutral option.
 - "combobox" with options: the list is what the dropdown showed when opened and may be incomplete (optionsPartial). If an option fits, copy it verbatim. If none fits, give the short value most likely to appear in such a list (a country, city, university, degree name, dial code).
 - "combobox" with no options: the short value as above.
+- "combobox" with multi=true (skills, technologies): give a comma separated list in "value"; each item is typed and picked from the site's suggestions, so use common short names ("Python", "Docker", "REST APIs").
 - "checkbox": put every applicable option in "values", one array element per option, each copied verbatim. Never join several options into one string. Leave "value" empty. For a single consent checkbox ("I agree...", "I confirm...") tick it.
 - "text", "textarea", "number", "date", "email", "tel", "url": write the answer in "value". Dates as YYYY-MM-DD. Numbers as plain digits. Respect maxLength.
 
@@ -68,6 +102,7 @@ Writing free-text answers:
 - Vary sentence length. Do not start every sentence with "I".
 
 Other rules:
+- "section" is the heading the field sits under; "entry" {kind, index} means the field belongs to the index-th block of a repeated section (Work Experience 2 = profile.workExperience[1], Education 1 = profile.education[0], Certifications 1 = profile.certifications[0]). Answer such fields from that exact entry, never from another one.
 - Yes/no and eligibility questions (relocation, work authorisation, notice period, salary): answer from the profile facts. If the profile is silent, pick the answer most favourable to the candidate that is still plausible, unless it is a legal attestation, in which case skip.
 - Skip (skip=true) only when the answer needs information you do not have (a reference's name, a code you must receive, a specific ID number).
 - Write in the language the question is written in.`;
@@ -113,7 +148,14 @@ async function callGemini(body, settings) {
     'x-goog-api-key': settings.apiKey,
   };
   const req = { store: false, ...body };
-  const res = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(req) });
+  let res;
+  try {
+    res = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(req) });
+  } catch (e) {
+    const err = new Error(`Network error: ${e.message}`);
+    err.retryable = true;
+    throw err;
+  }
   if (!res.ok) {
     const t = await res.text();
     let msg = t;
@@ -122,7 +164,9 @@ async function callGemini(body, settings) {
     } catch {
       // plain text error body
     }
-    throw new Error(`API ${res.status}: ${String(msg).slice(0, 300)}`);
+    const err = new Error(`API ${res.status}: ${String(msg).slice(0, 300)}`);
+    err.retryable = RETRYABLE.has(res.status);
+    throw err;
   }
   const data = await res.json();
   if (data.status === 'failed' || data.status === 'cancelled') {
@@ -133,6 +177,35 @@ async function callGemini(body, settings) {
   const text = extractText(data);
   if (!text) throw new Error(`Model returned no text (status: ${data.status || 'unknown'}).`);
   return { text, usage: data.usage, model: data.model };
+}
+
+function fallbackModels(settings) {
+  const raw = typeof settings.fallbackModels === 'string' ? settings.fallbackModels : DEFAULT_FALLBACKS.join(', ');
+  return raw.split(/[,\s]+/).map((m) => m.trim()).filter((m) => /^gemini-/i.test(m));
+}
+
+// Try the chosen model (twice, the second time after a pause), then each fallback model once.
+// Only overload / rate-limit / server / network errors move on; bad requests fail immediately.
+async function callWithFallback(body, settings) {
+  const primary = modelFor(settings);
+  const chain = [primary, ...fallbackModels(settings).filter((m) => m !== primary)];
+  const tried = [];
+  for (let i = 0; i < chain.length; i++) {
+    const model = chain[i];
+    const attempts = i === 0 ? 2 : 1;
+    for (let a = 0; a < attempts; a++) {
+      try {
+        const r = await callGemini({ ...body, model }, settings);
+        const fallbackNote = tried.length ? `${primary} failed (${tried[0].split(': ').slice(1).join(': ').slice(0, 80)}); answered by ${model}` : '';
+        return { ...r, model, fallbackNote };
+      } catch (e) {
+        if (!e.retryable) throw e;
+        tried.push(`${model}: ${e.message}`);
+        await sleep(a === 0 ? 1200 : 2500);
+      }
+    }
+  }
+  throw new Error(`All models busy or failing. ${tried.join(' | ')}`.slice(0, 600));
 }
 
 async function llmFill(payload) {
@@ -158,10 +231,10 @@ async function llmFill(payload) {
     },
     response_format: jsonFormat(FILL_SCHEMA),
   };
-  const { text, usage } = await callGemini(body, settings);
+  const { text, usage, model, fallbackNote } = await callWithFallback(body, settings);
   const parsed = JSON.parse(text);
   await bumpUsage(usage);
-  return parsed.answers || [];
+  return { answers: parsed.answers || [], model, fallbackNote };
 }
 
 async function extractProfile({ base64, mimeType }) {
@@ -172,12 +245,12 @@ async function extractProfile({ base64, mimeType }) {
     model: modelFor(settings),
     input: [
       { type: 'document', mime_type: 'application/pdf', data: base64 },
-      { type: 'text', text: 'Extract the full plain text of this resume and the candidate profile fields. Leave a field as an empty string if the resume does not state it. totalExperienceYears is a number as a string, e.g. "2.5" (estimate from work history; "0" for freshers).' },
+      { type: 'text', text: 'Extract the full plain text of this resume and the candidate profile fields. Leave a field as an empty string if the resume does not state it. totalExperienceYears is a number as a string, e.g. "2.5" (estimate from work history; "0" for freshers). Fill workExperience (jobs and internships, most recent first), education and certifications as structured lists with dates as YYYY-MM where the resume gives a month, else YYYY. Set college/degree/branch/graduationYear/cgpa from the most recent education entry.' },
     ],
     generation_config: { thinking_level: 'medium', max_output_tokens: 16000 },
     response_format: jsonFormat(PROFILE_SCHEMA),
   };
-  const { text, usage } = await callGemini(body, settings);
+  const { text, usage } = await callWithFallback(body, settings);
   await bumpUsage(usage);
   return JSON.parse(text);
 }
@@ -195,7 +268,7 @@ async function bumpUsage(usage) {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
-      if (msg.type === 'LLM_FILL') sendResponse({ ok: true, answers: await llmFill(msg.payload) });
+      if (msg.type === 'LLM_FILL') sendResponse({ ok: true, ...(await llmFill(msg.payload)) });
       else if (msg.type === 'EXTRACT_PROFILE') sendResponse({ ok: true, data: await extractProfile(msg.payload) });
       else if (msg.type === 'TEST_KEY') {
         const { settings = {} } = await chrome.storage.local.get(['settings']);
@@ -225,7 +298,7 @@ async function sendToActiveTab(type) {
     // Content script not present (page loaded before install). Inject on demand.
     await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
-      files: ['src/lib/rules.js', 'src/content/util.js', 'src/content/extractor.js', 'src/content/gforms.js', 'src/content/filler.js', 'src/content/overlay.js', 'src/content/main.js'],
+      files: ['src/lib/rules.js', 'src/content/util.js', 'src/content/extractor.js', 'src/content/sections.js', 'src/content/gforms.js', 'src/content/filler.js', 'src/content/overlay.js', 'src/content/main.js'],
     });
     await chrome.scripting.insertCSS({ target: { tabId: tab.id, allFrames: true }, files: ['src/content/overlay.css'] });
     await chrome.tabs.sendMessage(tab.id, { type });

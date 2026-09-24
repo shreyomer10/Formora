@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ApplyPilot - AI Job Application Autofill",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Extracts every question on a job application (ATS, company career pages, Google Forms) and fills it from your profile, resume and an LLM. Never auto-submits.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["https://generativelanguage.googleapis.com/*"],
@@ -29,6 +29,7 @@
         "src/lib/rules.js",
         "src/content/util.js",
         "src/content/extractor.js",
+        "src/content/sections.js",
         "src/content/gforms.js",
         "src/content/filler.js",
         "src/content/overlay.js",

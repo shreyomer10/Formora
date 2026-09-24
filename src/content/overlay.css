@@ -1,19 +1,31 @@
 #applypilot-root { all: initial; position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: 13px; color: #111; }
 #applypilot-root * { box-sizing: border-box; font-family: inherit; }
-#applypilot-root .ap-panel { width: 380px; max-height: 70vh; display: flex; flex-direction: column; background: #fff; border: 1px solid #ddd; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.22); overflow: hidden; }
-#applypilot-root .ap-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #7c3aed; color: #fff; font-weight: 600; }
+#applypilot-root .ap-panel { width: 380px; max-width: calc(100vw - 16px); max-height: 70vh; display: flex; flex-direction: column; background: #fff; border: 1px solid #ddd; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.22); overflow: hidden; }
+#applypilot-root .ap-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px; background: #7c3aed; color: #fff; font-weight: 600; cursor: grab; user-select: none; touch-action: none; }
+#applypilot-root.ap-dragging .ap-head { cursor: grabbing; }
 #applypilot-root .ap-head .ap-title { flex: 1; }
-#applypilot-root .ap-head button { background: rgba(255,255,255,.18); border: 0; color: #fff; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
+#applypilot-root .ap-head .ap-step { font-weight: 400; font-size: 11px; opacity: .85; margin-right: 4px; }
+#applypilot-root .ap-head button { background: rgba(255,255,255,.18); border: 0; color: #fff; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px; line-height: 1.2; }
+#applypilot-root .ap-head button:hover { background: rgba(255,255,255,.3); }
 #applypilot-root .ap-status { padding: 8px 12px; background: #f6f3ff; border-bottom: 1px solid #eee; color: #4c1d95; }
+#applypilot-root .ap-change { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 12px; background: #fff7ed; border-bottom: 1px solid #fed7aa; color: #9a3412; font-weight: 600; }
+#applypilot-root .ap-change span { flex: 1 1 100%; }
+#applypilot-root .ap-change button { border: 1px solid #ddd; background: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; color: #111; }
+#applypilot-root .ap-change button.ap-primary { background: #7c3aed; color: #fff; border-color: #7c3aed; }
 #applypilot-root .ap-list { overflow: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
+#applypilot-root.ap-min .ap-list, #applypilot-root.ap-min .ap-foot, #applypilot-root.ap-min .ap-change { display: none; }
+#applypilot-root.ap-min .ap-panel { width: 300px; }
 #applypilot-root .ap-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; }
 #applypilot-root .ap-item.ap-ok { border-left: 4px solid #16a34a; }
 #applypilot-root .ap-item.ap-ai { border-left: 4px solid #7c3aed; }
 #applypilot-root .ap-item.ap-skip { border-left: 4px solid #f59e0b; }
 #applypilot-root .ap-item.ap-fail { border-left: 4px solid #dc2626; }
+#applypilot-root .ap-item.ap-info { border-left: 4px solid #0ea5e9; background: #f0f9ff; }
 #applypilot-root .ap-label { font-weight: 600; margin-bottom: 4px; cursor: pointer; }
 #applypilot-root .ap-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: #eee; margin-left: 6px; font-weight: 500; vertical-align: middle; }
+#applypilot-root .ap-badge.ap-sec { background: #e0f2fe; color: #075985; }
 #applypilot-root .ap-note { color: #555; font-size: 12px; }
+#applypilot-root .ap-opts { max-height: 72px; overflow: auto; }
 #applypilot-root textarea { width: 100%; min-height: 56px; border: 1px solid #ddd; border-radius: 6px; padding: 6px; font-size: 12px; resize: vertical; }
 #applypilot-root .ap-row { display: flex; gap: 6px; margin-top: 6px; }
 #applypilot-root .ap-row button { border: 1px solid #ddd; background: #fafafa; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }

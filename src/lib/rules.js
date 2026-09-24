@@ -41,7 +41,7 @@ window.JAF.RULES = [
   { key: 'currentCtc',     test: /\b(current (ctc|salary|compensation|pay|package)|present (ctc|salary)|ctc \(current)\b/, types: ['text', 'number'] },
   { key: 'expectedCtc',    test: /\b(expected (ctc|salary|compensation|pay|package)|salary expectation|desired (salary|compensation|pay)|ctc \(expected)\b/, types: ['text', 'number'] },
   { key: 'noticePeriod',   test: /\b(notice period|how soon can you (join|start)|earliest (joining|start) date|availability to (join|start)|joining time|when can you (join|start))\b/, types: ['text', 'number', 'select', 'radio', 'combobox'] },
-  { key: 'skills',         test: /\b(skills?|technologies|tech stack|key skills|core competenc)\b/, types: ['text', 'textarea'] },
+  { key: 'skills',         test: /\b(skills?|technologies|tech stack|key skills|core competenc)\b/, types: ['text', 'textarea', 'combobox'] },
 
   // Education
   { key: 'college',        test: /\b(college|university|institute|school name|institution|alma mater)\b/, types: ['text', 'combobox'] },

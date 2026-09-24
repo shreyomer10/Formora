@@ -1,0 +1,193 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Workday-style application mock</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 30px auto; }
+    header { display: flex; justify-content: flex-end; gap: 12px; padding: 8px 0; border-bottom: 1px solid #ddd; }
+    h2 { font-size: 20px; } h3 { font-size: 16px; margin-top: 28px; } h4 { font-size: 14px; margin: 14px 0 6px; }
+    .field { margin: 10px 0; }
+    label { display: block; font-weight: 600; margin-bottom: 3px; }
+    input[type=text], textarea { width: 100%; padding: 6px; }
+    button { padding: 6px 14px; border-radius: 999px; border: 1px solid #0b6fb3; background: #fff; color: #0b6fb3; cursor: pointer; }
+    button.primary { background: #0b6fb3; color: #fff; }
+    .date { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #999; padding: 4px; }
+    .date input { width: 36px; border: 0; text-align: center; } .date input.y { width: 52px; }
+    .dropzone { border: 2px dashed #bbb; padding: 30px; text-align: center; background: #f6f6f6; }
+    .dropzone input { display: none; }
+    .search { position: relative; }
+    .search input { width: 100%; padding: 6px; }
+    .menu { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid #999; z-index: 5; }
+    .menu [role=option], .menu .none { padding: 4px 8px; cursor: pointer; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+    .chip { background: #e5e7eb; border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+    .entry { border-left: 3px solid #ddd; padding-left: 10px; margin: 10px 0; }
+    .hidden { display: none; }
+    footer { margin-top: 30px; display: flex; justify-content: flex-end; gap: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <button aria-haspopup="listbox" aria-label="language Selector Button">English</button>
+    <button aria-haspopup="listbox" aria-label="settings Selector Button">Settings</button>
+  </header>
+
+  <!-- Step 1: My Information -->
+  <section id="step1">
+    <h2>My Information</h2>
+    <div class="field"><label for="fn">First Name*</label><input id="fn" type="text" /></div>
+    <div class="field"><label for="ln">Last Name*</label><input id="ln" type="text" /></div>
+    <div class="field"><label for="em">Email Address*</label><input id="em" type="text" /></div>
+    <div class="field"><label><input type="checkbox" id="pref" /> I have a preferred name</label></div>
+    <footer><button class="primary" id="next1">Save and Continue</button></footer>
+  </section>
+
+  <!-- Step 2: My Experience (SPA-style: shown after Save and Continue, URL hash changes) -->
+  <section id="step2" class="hidden">
+    <h2>My Experience</h2>
+
+    <h3>Work Experience</h3>
+    <div id="workEntries"></div>
+    <button id="addWork">Add</button>
+
+    <h3>Education</h3>
+    <div id="eduEntries">
+      <div class="entry" data-entry="education">
+        <h4>Education 1</h4>
+        <div class="field"><label>School or University*</label><input type="text" data-f="school" /></div>
+        <div class="field"><label>Degree*</label>
+          <button aria-haspopup="listbox" data-f="degree" class="sel">Select One</button>
+        </div>
+        <div class="field"><label>Field of Study*</label>
+          <div class="search" data-src="fields"><input type="text" placeholder="Search" data-f="field" /></div>
+        </div>
+      </div>
+    </div>
+    <button id="addEdu">Add Another</button>
+
+    <h3>Certifications</h3>
+    <div id="certEntries"></div>
+    <button id="addCert">Add</button>
+
+    <h3>Skills</h3>
+    <p>In the skills section below please only include relevant skills you have acquired.</p>
+    <div class="field"><label>Type to Add Skills*</label>
+      <div class="search multi" data-src="skills" data-automation-id="multiselectInputContainer"><div class="chips"></div><input type="text" placeholder="Search" id="skills" /></div>
+    </div>
+
+    <h3>Resume/CV</h3>
+    <label>Upload a file (5MB max)*</label>
+    <div class="dropzone" id="cvzone"><div>Drop files here</div><div>or <a href="#" id="cvpick">Select files</a></div><input type="file" id="cv" /></div>
+    <div id="cvname"></div>
+
+    <footer><button id="back2">Back</button><button class="primary" id="next2">Save and Continue</button></footer>
+  </section>
+
+  <script>
+    // ---- navigation (no reload, hash change) ----
+    const show = (n) => { document.querySelectorAll('section').forEach((s) => s.classList.toggle('hidden', s.id !== 'step' + n)); location.hash = 'step' + n; };
+    document.getElementById('next1').onclick = () => show(2);
+    document.getElementById('back2').onclick = () => show(1);
+    document.getElementById('next2').onclick = () => alert('would submit');
+
+    // ---- repeatable blocks ----
+    let workN = 0, certN = 0, eduN = 1;
+    const dateWidget = (name) => `<div class="field"><label>${name}${name === 'From' ? '*' : ''}</label><div class="date"><input type="text" placeholder="MM" aria-label="Month" maxlength="2" /><span>/</span><input type="text" placeholder="YYYY" aria-label="Year" class="y" maxlength="4" /></div></div>`;
+    document.getElementById('addWork').onclick = (e) => {
+      workN++;
+      const d = document.createElement('div'); d.className = 'entry'; d.dataset.entry = 'work';
+      d.innerHTML = `<h4>Work Experience ${workN}</h4>
+        <div class="field"><label>Job Title*</label><input type="text" data-f="title" /></div>
+        <div class="field"><label>Company*</label><input type="text" data-f="company" /></div>
+        <div class="field"><label>Location</label><input type="text" data-f="location" /></div>
+        <div class="field"><label><input type="checkbox" data-f="current" /> I currently work here</label></div>
+        ${dateWidget('From')}${dateWidget('To')}
+        <div class="field"><label>Role Description</label><textarea data-f="description"></textarea></div>`;
+      document.getElementById('workEntries').appendChild(d);
+      e.target.textContent = 'Add Another';
+    };
+    document.getElementById('addCert').onclick = (e) => {
+      certN++;
+      const d = document.createElement('div'); d.className = 'entry'; d.dataset.entry = 'cert';
+      d.innerHTML = `<h4>Certifications ${certN}</h4>
+        <div class="field"><label>Certification*</label><input type="text" data-f="name" /></div>
+        <div class="field"><label>Certification Number</label><input type="text" data-f="number" /></div>
+        <div class="field"><label>Issued Date</label><div class="date"><input type="text" placeholder="MM" aria-label="Month" maxlength="2" /><span>/</span><input type="text" placeholder="DD" aria-label="Day" maxlength="2" /><span>/</span><input type="text" placeholder="YYYY" aria-label="Year" class="y" maxlength="4" /></div></div>
+        <div class="field"><label>Attachments</label><div class="dropzone"><div>Drop files here</div><input type="file" /></div></div>`;
+      document.getElementById('certEntries').appendChild(d);
+      e.target.textContent = 'Add Another';
+    };
+    document.getElementById('addEdu').onclick = () => {
+      eduN++;
+      const d = document.createElement('div'); d.className = 'entry'; d.dataset.entry = 'education';
+      d.innerHTML = `<h4>Education ${eduN}</h4>
+        <div class="field"><label>School or University*</label><input type="text" data-f="school" /></div>
+        <div class="field"><label>Degree*</label><button aria-haspopup="listbox" data-f="degree" class="sel">Select One</button></div>
+        <div class="field"><label>Field of Study*</label><div class="search" data-src="fields"><input type="text" placeholder="Search" data-f="field" /></div></div>`;
+      document.getElementById('eduEntries').appendChild(d);
+      wireSearches();
+    };
+
+    // ---- degree dropdown button (popup rendered in a portal, options only while open) ----
+    const DEGREES = ['Master of Science', 'Bachelor of Technology', 'Bachelor of Engineering', 'Bachelor of Science', 'Diploma', 'Other'];
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('button.sel');
+      const open = document.getElementById('portal');
+      if (open) open.remove();
+      if (!b || open && open.dataset.for === b.dataset.uid) return;
+      b.dataset.uid = b.dataset.uid || Math.random().toString(36).slice(2);
+      const p = document.createElement('div'); p.id = 'portal'; p.className = 'menu'; p.setAttribute('role', 'listbox'); p.dataset.for = b.dataset.uid;
+      const r = b.getBoundingClientRect(); p.style.position = 'fixed'; p.style.left = r.left + 'px'; p.style.top = r.bottom + 'px'; p.style.width = r.width + 'px';
+      DEGREES.forEach((d) => { const o = document.createElement('div'); o.setAttribute('role', 'option'); o.textContent = d; o.onclick = () => { b.textContent = d; p.remove(); }; p.appendChild(o); });
+      document.body.appendChild(p);
+    });
+
+    // ---- typeahead search boxes: "No Items." until you type, results arrive async ----
+    const SRC = {
+      fields: ['Computer Science', 'Data Science', 'Data Science and Artificial Intelligence', 'Electrical Engineering', 'Mathematics'],
+      skills: ['Python (Programming Language)', 'Java', 'C (Programming Language)', 'SQL', 'Kotlin', 'Docker', 'AWS', 'Flutter', 'REST APIs', 'Node.js', 'Go (Programming Language)'],
+    };
+    function wireSearches() {
+      document.querySelectorAll('.search').forEach((box) => {
+        if (box.dataset.wired) return; box.dataset.wired = '1';
+        const input = box.querySelector('input');
+        const items = SRC[box.dataset.src];
+        let menu = null, timer = null;
+        const close = () => { if (menu) { menu.remove(); menu = null; } };
+        const render = () => {
+          close();
+          menu = document.createElement('div'); menu.className = 'menu';
+          const q = input.value.trim().toLowerCase();
+          const hits = q ? items.filter((i) => i.toLowerCase().includes(q)) : [];
+          if (!hits.length) { const n = document.createElement('div'); n.className = 'none'; n.textContent = 'No Items.'; menu.appendChild(n); }
+          hits.forEach((h) => { const o = document.createElement('div'); o.setAttribute('role', 'option'); o.textContent = h;
+            o.addEventListener('mousedown', (ev) => ev.preventDefault());
+            o.addEventListener('click', () => {
+              if (box.classList.contains('multi')) { const c = document.createElement('span'); c.className = 'chip'; c.textContent = h; box.querySelector('.chips').appendChild(c); input.value = ''; close(); }
+              else { input.value = h; input.dataset.picked = h; close(); }
+            });
+            menu.appendChild(o); });
+          box.appendChild(menu);
+        };
+        input.addEventListener('focus', render);
+        if (box.classList.contains('multi')) {
+          // Workday-style: typing shows nothing, the search runs on Enter after a server round trip.
+          input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); timer = setTimeout(render, 600); } });
+        } else {
+          input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 350); }); // simulate server search
+        }
+        input.addEventListener('blur', () => { setTimeout(() => { if (!box.classList.contains('multi') && input.value !== input.dataset.picked) input.value = ''; close(); }, 120); });
+      });
+    }
+    wireSearches();
+
+    // ---- drop zone: only reacts to a real drop event ----
+    const zone = document.getElementById('cvzone');
+    zone.addEventListener('dragover', (e) => e.preventDefault());
+    zone.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) document.getElementById('cvname').textContent = 'Uploaded: ' + f.name; });
+    document.getElementById('cvpick').onclick = (e) => { e.preventDefault(); document.getElementById('cv').click(); };
+    if (location.hash === '#step2') show(2);
+  </script>
+</body>
+</html>

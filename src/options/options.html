@@ -21,6 +21,13 @@
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
     td, th { text-align: left; padding: 6px; border-bottom: 1px solid #eee; vertical-align: top; }
     td button { padding: 2px 8px; font-size: 11px; }
+    h3 { font-size: 14px; margin: 16px 0 6px; }
+    .list { display: flex; flex-direction: column; gap: 10px; }
+    .entry { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; position: relative; }
+    .entry .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .entry .remove { position: absolute; top: 8px; right: 8px; padding: 2px 8px; font-size: 11px; }
+    .entry .check { flex-direction: row; align-items: center; gap: 6px; }
+    .entry .check input { width: auto; }
   </style>
 </head>
 <body>
@@ -37,6 +44,9 @@
         <option value="gemini-3.5-flash-lite">cheaper, faster</option>
         <option value="gemini-3.1-pro-preview">preview</option>
       </datalist>
+    </label>
+    <label class="full">Fallback models, tried in order when the model above is overloaded or rate limited (503 / 429)
+      <input id="fallbackModels" placeholder="gemini-3.5-flash-lite, gemini-3.1-pro-preview" />
     </label>
     <label>Thinking level
       <select id="effort">
@@ -96,6 +106,18 @@
       <textarea data-k="facts" placeholder="Willing to relocate anywhere in India. Open to remote. Indian citizen, no visa sponsorship needed in India. Comfortable with night shifts: no."></textarea>
     </label>
   </div>
+
+  <h2>3b. Work experience, education, certifications</h2>
+  <p class="muted">Used for forms with repeatable blocks (Workday "Add" buttons and the like): one block is added per entry and its fields filled from that entry. Most recent first. Dates as YYYY-MM.</p>
+  <h3>Work experience</h3>
+  <div id="workList" class="list"></div>
+  <div class="row"><button data-add="workExperience">Add a job / internship</button></div>
+  <h3>Education</h3>
+  <div id="eduList" class="list"></div>
+  <div class="row"><button data-add="education">Add education</button></div>
+  <h3>Certifications</h3>
+  <div id="certList" class="list"></div>
+  <div class="row"><button data-add="certifications">Add certification</button></div>
 
   <h2>4. Answer style</h2>
   <label>Custom instructions for generated answers (tone, length, things to emphasise or avoid)

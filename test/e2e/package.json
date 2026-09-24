@@ -1,6 +1,13 @@
 {
   "name": "applypilot-e2e",
   "private": true,
-  "scripts": { "test": "node run.js", "test:headful": "node run.js --headful" },
-  "devDependencies": { "puppeteer-core": "^25.11.0" }
+  "scripts": {
+    "test": "node fallback.test.js && node run.js",
+    "test:headful": "node run.js --headful",
+    "test:fallback": "node fallback.test.js",
+    "debug": "node debug.js"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.11.0"
+  }
 }
