@@ -66,7 +66,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "icons/icon32.png"
+        "icons/dark/icon32.png"
       ],
       "matches": [
         "http://*/*",

@@ -97,7 +97,7 @@
         r.innerHTML = `
           <div class="ap-panel">
             <div class="ap-head" title="Drag to move. Double-click to reset position and size.">
-              <span class="ap-title"><img class="ap-logo" alt="" src="${chrome.runtime.getURL("icons/icon32.png")}" /> Formora</span><span class="ap-step"></span>
+              <span class="ap-title"><img class="ap-logo" alt="" src="${chrome.runtime.getURL("icons/dark/icon32.png")}" /> Formora</span><span class="ap-step"></span>
               <button data-act="fill" title="Extract and fill the form on this page">Fill page</button>
               <button data-act="scan" title="Only list the questions, fill nothing">Scan</button>
               <button data-act="min" title="Collapse">&#8211;</button>

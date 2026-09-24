@@ -269,10 +269,22 @@ async function bumpUsage(usage) {
   await chrome.storage.local.set({ stats });
 }
 
+// Chrome has no light/dark variants for action icons. Pages and the popup report the browser's
+// colour scheme; on dark toolbars the slate square vanishes, so the white glyph alone is used there.
+const ICONS = (dark) => Object.fromEntries([16, 32, 48, 128].map((n) => [n, `icons/${dark ? 'dark/' : ''}icon${n}.png`]));
+let iconDark = null;
+async function setToolbarIcon(dark) {
+  if (iconDark === dark) return;
+  iconDark = dark;
+  try { await chrome.action.setIcon({ path: ICONS(dark) }); } catch { /* action API unavailable */ }
+}
+chrome.storage.local.get(['ui']).then(({ ui }) => { if (ui && typeof ui.dark === 'boolean') setToolbarIcon(ui.dark); });
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
-      if (msg.type === 'LLM_FILL') sendResponse({ ok: true, ...(await llmFill(msg.payload)) });
+      if (msg.type === 'COLOR_SCHEME') { await setToolbarIcon(!!msg.dark); sendResponse({ ok: true }); }
+      else if (msg.type === 'LLM_FILL') sendResponse({ ok: true, ...(await llmFill(msg.payload)) });
       else if (msg.type === 'EXTRACT_PROFILE') sendResponse({ ok: true, data: await extractProfile(msg.payload) });
       else if (msg.type === 'TEST_KEY') {
         const { settings = {} } = await chrome.storage.local.get(['settings']);

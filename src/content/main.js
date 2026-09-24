@@ -116,7 +116,7 @@
       // or two: those are the same page. A new page is when most of what we extracted is gone and
       // other fields took its place, or the URL moved and the fields changed with it.
       const net = fp.unknown - fp.lost; // fields that appeared beyond one-for-one replacements
-      const mostLost = fp.total > 0 && fp.lost >= Math.max(2, Math.ceil(fp.total * 0.6));
+      const mostLost = fp.total > 0 && fp.lost >= Math.max(2, Math.ceil(fp.total * 0.85));
       const newPage = (mostLost && fp.unknown >= 2) ||
         (fp.url !== baseline.url && (fp.lost > 0 || fp.unknown > 0)) ||
         (fp.total === 0 && Math.abs(fp.count - baseline.count) >= 3);
@@ -313,6 +313,16 @@
         reply({ ok: false, note: err.message });
       }
     });
+  }
+
+  // Tell the service worker which toolbar icon set fits the browser's colour scheme.
+  if (isTop) {
+    try {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      const report = () => { chrome.runtime.sendMessage({ type: 'COLOR_SCHEME', dark: mq.matches }).catch(() => {}); chrome.storage.local.set({ ui: { dark: mq.matches } }); };
+      report();
+      mq.addEventListener('change', report);
+    } catch { /* no matchMedia */ }
   }
 
   // After a full page load inside an application the user already started, come back up

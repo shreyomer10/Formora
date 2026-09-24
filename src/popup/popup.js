@@ -25,6 +25,7 @@ document.getElementById('fill').onclick = () => send('FILL_PAGE');
 document.getElementById('scan').onclick = () => send('SCAN_PAGE');
 document.getElementById('options').onclick = () => chrome.runtime.openOptionsPage();
 
+chrome.runtime.sendMessage({ type: 'COLOR_SCHEME', dark: window.matchMedia('(prefers-color-scheme: dark)').matches }).catch(() => {});
 chrome.storage.local.get(['settings', 'profile', 'resume']).then(({ settings = {}, profile = {}, resume }) => {
   const missing = [];
   if (!settings.apiKey) missing.push('API key');
