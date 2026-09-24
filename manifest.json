@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Formora - one-click job application autofill",
   "version": "0.2.0",
-  "description": "Application forms filled with complete honesty. Reads every question on a job application (Workday, Greenhouse, career pages, Google Forms), fills it from your profile and resume, and lets you review before you submit. Never auto-submits.",
+  "description": "Fill job applications from your profile and resume. Review every answer in a sidebar or dialog. You stay in control of submitting.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -12,7 +12,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*"
@@ -32,6 +33,9 @@
     }
   },
   "options_page": "src/options/options.html",
+  "side_panel": {
+    "default_path": "src/sidepanel/sidepanel.html"
+  },
   "commands": {
     "fill-page": {
       "suggested_key": {

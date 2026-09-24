@@ -1,7 +1,21 @@
 const status = document.getElementById('status');
 const FILES = ['src/lib/rules.js', 'src/content/util.js', 'src/content/extractor.js', 'src/content/sections.js', 'src/content/gforms.js', 'src/content/filler.js', 'src/content/overlay.js', 'src/content/main.js'];
+let popupTab = null, panelLayout = 'dialog';
+document.getElementById('fill').disabled = true;
+document.getElementById('scan').disabled = true;
+Promise.all([chrome.tabs.query({ active: true, currentWindow: true }), chrome.storage.local.get(['settings'])]).then(([tabs, { settings = {} }]) => {
+  popupTab = tabs[0]; panelLayout = settings.panelLayout;
+  document.getElementById('fill').disabled = false;
+  document.getElementById('scan').disabled = false;
+});
 
 async function send(type) {
+  // This branch also handles a popup that was already open when Settings changed.
+  if (panelLayout === 'sidebar') {
+    if (!chrome.sidePanel?.open) { status.textContent = 'This browser does not support native side panels. Choose Floating dialog in Settings.'; return; }
+    try { await chrome.sidePanel.open({ windowId: popupTab.windowId }); }
+    catch (e) { status.textContent = 'Could not open the browser panel: ' + e.message; return; }
+  }
   status.textContent = 'Working...';
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id || !/^https?:|^file:/.test(tab.url || '')) { status.textContent = 'Open a job application page first.'; return; }
@@ -37,5 +51,10 @@ chrome.storage.local.get(['settings', 'profile', 'resume']).then(({ settings = {
   if (!settings.apiKey) missing.push('API key');
   if (!profile.email) missing.push('profile');
   if (!resume) missing.push('resume');
-  if (missing.length) status.textContent = 'Setup needed: ' + missing.join(', ');
+  if (missing.length) {
+    status.textContent = 'Finish setup: ' + missing.join(', ') + '. Open the setup guide below.';
+    const options = document.getElementById('options');
+    options.textContent = 'Continue setup';
+    options.classList.add('primary');
+  }
 });

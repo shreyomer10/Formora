@@ -4,17 +4,17 @@ const vm = require('vm');
 const fs = require('fs');
 const path = require('path');
 
-const src = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'background', 'service-worker.js'), 'utf8');
+const src = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'background', 'service-worker.js'), 'utf8').replace("import '../lib/models.js';", fs.readFileSync(path.resolve(__dirname, '../../src/lib/models.js'), 'utf8'));
 
 function makeSandbox(fetchImpl, settings) {
   const listeners = {};
   const store = { settings, profile: { firstName: 'Asha' }, resume: null, stats: undefined };
   const sandbox = {
     console,
-    setTimeout,
+    setTimeout: (fn) => setTimeout(fn, 0),
     fetch: fetchImpl,
     chrome: {
-      runtime: { onMessage: { addListener: (fn) => (listeners.message = fn) } },
+      runtime: { onMessage: { addListener: (fn) => (listeners.message = fn) }, onInstalled: { addListener: (fn) => (listeners.install = fn) }, openOptionsPage: async () => { store.opened = (store.opened || 0) + 1; } },
       commands: { onCommand: { addListener: () => {} } },
       tabs: {}, scripting: {},
       storage: { local: { get: async (keys) => Object.fromEntries(keys.map((k) => [k, store[k]]).filter(([, v]) => v !== undefined)), set: async (patch) => Object.assign(store, patch) } },
@@ -22,7 +22,7 @@ function makeSandbox(fetchImpl, settings) {
   };
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
-  return { send: (msg) => new Promise((resolve) => listeners.message(msg, {}, resolve)), store };
+  return { send: (msg) => new Promise((resolve) => listeners.message(msg, {}, resolve)), store, install: (reason) => listeners.install({ reason }) };
 }
 
 const okBody = (model) => ({ status: 'completed', model, output_text: JSON.stringify({ answers: [{ id: 'q1', value: 'hi', values: [], skip: false, note: '' }] }), usage: { total_input_tokens: 10, total_output_tokens: 5 } });
@@ -70,5 +70,30 @@ const expect = (name, cond, extra = '') => { if (!cond) { failures++; console.lo
   r = await sb.send({ type: 'LLM_FILL', payload: { questions: [], page: {}, previousAnswers: [] } });
   expect('healthy primary: single call, no fallback note', r.ok && calls.length === 1 && !r.fallbackNote);
 
+  // A retired model is skipped without retry; array fallbacks preserve order and deduplicate.
+  calls = [];
+  sb = makeSandbox(async (url, init) => {
+    const model = JSON.parse(init.body).model; calls.push(model);
+    return model === 'gemini-3.1-pro-preview' ? res(200, okBody(model)) : res(404, { error: { message: 'Model retired' } });
+  }, { apiKey: 'k', model: 'gemini-3.8-flash', fallbackModels: ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'] });
+  r = await sb.send({ type: 'LLM_FILL', payload: { questions: [], page: {} } });
+  expect('retired primary and fallback skipped; next model answers with visible note', r.ok && /404/.test(r.fallbackNote) && calls.join(',') === 'gemini-3.8-flash,gemini-3.5-flash-lite,gemini-3.1-pro-preview');
+  calls = [];
+  sb = makeSandbox(async (url, init) => { const m = JSON.parse(init.body).model; calls.push(m); return res(404, { error: { message: 'Gone' } }); }, { apiKey: 'k', fallbackModels: [] });
+  r = await sb.send({ type: 'LLM_FILL', payload: { questions: [], page: {} } });
+  expect('empty fallback selection stays empty', !r.ok && calls.length === 1);
+  calls = [];
+  sb = makeSandbox(async (url, init) => {
+    const m = JSON.parse(init.body).model; calls.push(m);
+    return m === 'gemini-3.5-flash-lite' ? res(404, { error: { message: 'Unavailable' } }) : res(200, { output_text: '{"ok":true}' });
+  }, { apiKey: 'k' });
+  r = await sb.send({ type: 'TEST_MODELS' });
+  expect('model check tests each model individually and reports failures', r.ok && r.results.length === 3 && r.results[0].ok && !r.results[1].ok && r.results[2].ok && calls.length === 3);
+  sb.install('update');
+  expect('update does not open onboarding', !sb.store.opened);
+  sb.install('install');
+  expect('first install opens options', sb.store.opened === 1);
+  await sb.send({ type: 'OPEN_OPTIONS' });
+  expect('panel settings message opens options', sb.store.opened === 2);
   process.exit(failures ? 1 : 0);
 })();

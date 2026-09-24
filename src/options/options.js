@@ -1,5 +1,63 @@
 const $ = (id) => document.getElementById(id);
 const profileInputs = () => Array.from(document.querySelectorAll('#profileGrid [data-k]'));
+let setupComplete = false;
+let hasResume = false;
+let savedSettings = {};
+let modelIds = [...FormoraModels.ids];
+
+function updateSetup() {
+  const steps = [!!$('apiKey').value.trim(), hasResume, !!$('resumeText').value.trim(), setupComplete];
+  const current = steps.findIndex((done) => !done);
+  document.querySelectorAll('#setupSteps li').forEach((li, i) => {
+    li.dataset.done = String(steps[i]);
+    if (i === current) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+  });
+  $('setupHint').textContent = [
+    'Start by adding your Gemini API key below. Test it before continuing.',
+    'Choose your resume file below. PDF supports AI extraction.',
+    'Extract your PDF with AI, or paste resume text and complete your profile manually.',
+    'Review the extracted details, including your name and email, then click Save everything to finish setup.',
+  ][current] || 'Setup complete. Open an application and click Fill page, or press Alt+Shift+F.';
+  $('onboarding').hidden = setupComplete;
+}
+
+function modelOptions(select, selected) {
+  select.replaceChildren(...modelIds.map((id) => {
+    const option = new Option(id + (FormoraModels.ids.includes(id) ? '' : ' (previously saved; verify availability)'), id);
+    option.selected = id === selected;
+    return option;
+  }));
+}
+
+function selectedFallbacks() { return [...$('fallbackModels').querySelectorAll('select')].map((s) => s.value); }
+function refreshFallbackChoices() {
+  const selected = [$('model').value, ...selectedFallbacks()];
+  $('fallbackModels').querySelectorAll('select').forEach((s) => {
+    [...s.options].forEach((o) => { o.disabled = o.value !== s.value && selected.includes(o.value); });
+  });
+  $('fallbackModels').querySelectorAll('[data-move-up]').forEach((b, i) => { b.disabled = i === 0; });
+  $('addFallback').disabled = selectedFallbacks().length >= 2 || modelIds.every((id) => selected.includes(id));
+}
+function addFallback(id) {
+  const row = document.createElement('div'); row.className = 'fallback-row';
+  const select = document.createElement('select'); select.setAttribute('aria-label', 'Fallback model');
+  modelOptions(select, id);
+  select.onchange = refreshFallbackChoices;
+  const remove = document.createElement('button'); remove.textContent = 'Remove'; remove.type = 'button';
+  remove.onclick = () => { row.remove(); refreshFallbackChoices(); };
+  const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑';
+  up.dataset.moveUp = ''; up.setAttribute('aria-label', 'Try this fallback earlier');
+  up.onclick = () => { if (row.previousElementSibling) row.previousElementSibling.before(row); refreshFallbackChoices(); };
+  row.append(select, remove, up); $('fallbackModels').append(row);
+  refreshFallbackChoices();
+}
+$('addFallback').onclick = () => addFallback(modelIds.find((id) => ![$('model').value, ...selectedFallbacks()].includes(id)));
+$('model').onchange = () => {
+  [...$('fallbackModels').querySelectorAll('select')].forEach((s) => { if (s.value === $('model').value) s.parentElement.remove(); });
+  refreshFallbackChoices();
+};
+$('apiKey').addEventListener('input', updateSetup);
+$('resumeText').addEventListener('input', updateSetup);
 
 // Repeatable profile sections. Each entry renders as a small grid of fields.
 const LISTS = {
@@ -89,10 +147,20 @@ function fileToBase64(file) {
 }
 
 async function load() {
-  const { settings = {}, profile = {}, resume, memory = {}, stats } = await chrome.storage.local.get(['settings', 'profile', 'resume', 'memory', 'stats']);
+  const { settings = {}, profile = {}, resume, memory = {}, stats, onboarding = {} } = await chrome.storage.local.get(['settings', 'profile', 'resume', 'memory', 'stats', 'onboarding']);
+  savedSettings = settings;
+  setupComplete = !!onboarding.completed;
+  hasResume = !!resume;
   $('apiKey').value = settings.apiKey || '';
-  $('model').value = /^gemini-/i.test(settings.model || '') ? settings.model : 'gemini-3.8-flash';
-  $('fallbackModels').value = settings.fallbackModels == null ? 'gemini-3.5-flash-lite, gemini-3.1-pro-preview' : settings.fallbackModels;
+  const primary = /^gemini-/i.test(settings.model || '') ? settings.model : FormoraModels.primary;
+  const fallbacks = FormoraModels.parse(settings.fallbackModels).filter((id) => id !== primary);
+  modelIds = [...new Set([...FormoraModels.ids, primary, ...fallbacks])];
+  modelOptions($('model'), primary);
+  $('fallbackModels').replaceChildren();
+  fallbacks.forEach(addFallback);
+  refreshFallbackChoices();
+  $('modelHint').textContent = `Catalog reviewed ${FormoraModels.reviewed}. Test all selected models after Gemini releases. Previously saved IDs are kept until you remove them.`;
+  $('panelLayout').value = settings.panelLayout === 'sidebar' ? 'sidebar' : 'dialog';
   $('effort').value = settings.effort || 'medium';
   $('overwrite').checked = !!settings.overwrite;
   $('customInstructions').value = settings.customInstructions || '';
@@ -103,6 +171,7 @@ async function load() {
     $('resumeText').value = resume.text || '';
   }
   renderMemory(memory);
+  updateSetup();
   if (stats) $('stats').textContent = `${stats.calls} API calls · ${stats.input.toLocaleString()} input tokens (${stats.cached.toLocaleString()} cached) · ${stats.output.toLocaleString()} output tokens`;
 }
 
@@ -126,11 +195,13 @@ function renderMemory(memory) {
   if (!entries.length) tb.innerHTML = '<tr><td colspan="3" class="muted">Empty.</td></tr>';
 }
 
-async function save() {
+async function save(completeSetup = false) {
   const settings = {
+    ...savedSettings,
     apiKey: $('apiKey').value.trim(),
     model: $('model').value.trim() || 'gemini-3.8-flash',
-    fallbackModels: $('fallbackModels').value.trim(),
+    fallbackModels: selectedFallbacks(),
+    panelLayout: $('panelLayout').value,
     effort: $('effort').value,
     overwrite: $('overwrite').checked,
     customInstructions: $('customInstructions').value.trim(),
@@ -141,51 +212,79 @@ async function save() {
   const { resume } = await chrome.storage.local.get(['resume']);
   const patch = { settings, profile };
   if (resume) patch.resume = { ...resume, text: $('resumeText').value };
+  if (completeSetup && settings.apiKey && resume && $('resumeText').value.trim() && (profile.firstName || profile.fullName) && profile.email) {
+    patch.onboarding = { completed: true, completedAt: Date.now() };
+    setupComplete = true;
+  }
   await chrome.storage.local.set(patch);
+  savedSettings = settings;
+  updateSetup();
   $('saveMsg').textContent = 'Saved.';
   setTimeout(() => ($('saveMsg').textContent = ''), 2000);
 }
 
-$('save').onclick = save;
+$('save').onclick = () => save(true).catch((e) => { $('saveMsg').textContent = e.message; });
 
 $('resumeFile').onchange = async () => {
   const f = $('resumeFile').files[0];
   if (!f) return;
   const base64 = await fileToBase64(f);
-  const { resume } = await chrome.storage.local.get(['resume']);
   const mimeType = f.type || (f.name.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
-  await chrome.storage.local.set({ resume: { fileName: f.name, mimeType, base64, text: resume && resume.text ? resume.text : '' } });
+  await chrome.storage.local.set({ resume: { fileName: f.name, mimeType, base64, text: '' } });
+  hasResume = true;
+  $('resumeText').value = '';
+  $('resumeInfo').textContent = `Stored: ${f.name} (${Math.round(f.size / 1024)} KB), no text yet`;
   $('resumeMsg').textContent = 'Resume stored. Now click extract (PDF) or paste the text.';
-  load();
+  updateSetup();
 };
 
 $('extract').onclick = async () => {
-  await save();
-  const { resume } = await chrome.storage.local.get(['resume']);
-  if (!resume) { $('resumeMsg').textContent = 'Choose a resume file first.'; return; }
-  $('resumeMsg').textContent = 'Reading resume with Gemini...';
-  const resp = await chrome.runtime.sendMessage({ type: 'EXTRACT_PROFILE', payload: { base64: resume.base64, mimeType: resume.mimeType } });
-  if (!resp.ok) { $('resumeMsg').textContent = 'Failed: ' + resp.error; return; }
-  const { resumeText, profile } = resp.data;
-  $('resumeText').value = resumeText;
-  profileInputs().forEach((el) => {
-    const v = profile[el.dataset.k];
-    if (v && !el.value) el.value = v;
-  });
-  Object.keys(LISTS).forEach((k) => {
-    // Only replace a list the user has not filled in by hand.
-    if (Array.isArray(profile[k]) && profile[k].length && !readList(k).length) renderList(k, profile[k]);
-  });
-  await save();
-  $('resumeMsg').textContent = 'Done. Review the profile fields below and save.';
-  load();
+  $('extract').disabled = true;
+  try {
+    await save();
+    const { resume } = await chrome.storage.local.get(['resume']);
+    if (!resume) { $('resumeMsg').textContent = 'Choose a resume file first.'; return; }
+    $('resumeMsg').textContent = 'Reading resume with Gemini...';
+    const resp = await chrome.runtime.sendMessage({ type: 'EXTRACT_PROFILE', payload: { base64: resume.base64, mimeType: resume.mimeType } });
+    if (!resp.ok) { $('resumeMsg').textContent = 'Failed: ' + resp.error; return; }
+    const { resumeText, profile } = resp.data;
+    $('resumeText').value = resumeText;
+    profileInputs().forEach((el) => {
+      const v = profile[el.dataset.k];
+      if (v && !el.value) el.value = v;
+    });
+    Object.keys(LISTS).forEach((k) => {
+      // Only replace a list the user has not filled in by hand.
+      if (Array.isArray(profile[k]) && profile[k].length && !readList(k).length) renderList(k, profile[k]);
+    });
+    $('resumeMsg').textContent = 'Done. Review the profile fields below and save.';
+    updateSetup();
+  } catch (e) { $('resumeMsg').textContent = 'Failed: ' + e.message; }
+  finally { $('extract').disabled = false; }
 };
 
 $('testKey').onclick = async () => {
-  await save();
-  $('keyMsg').textContent = 'Testing...';
-  const resp = await chrome.runtime.sendMessage({ type: 'TEST_KEY' });
-  $('keyMsg').textContent = resp.ok ? `Works (model replied: ${resp.data.trim()})` : 'Failed: ' + resp.error;
+  $('testKey').disabled = true;
+  try {
+    await save();
+    $('keyMsg').textContent = 'Testing...';
+    const resp = await chrome.runtime.sendMessage({ type: 'TEST_KEY' });
+    $('keyMsg').textContent = resp.ok ? `Works (model replied: ${resp.data.trim()})` : 'Failed: ' + resp.error;
+  } catch (e) { $('keyMsg').textContent = 'Failed: ' + e.message; }
+  finally { $('testKey').disabled = false; }
+};
+
+$('testModels').onclick = async () => {
+  $('testModels').disabled = true;
+  $('modelResults').textContent = 'Testing each selected model…';
+  try {
+    await save();
+    const resp = await chrome.runtime.sendMessage({ type: 'TEST_MODELS' });
+    $('modelResults').textContent = resp.ok
+      ? resp.results.map((r) => `${r.model}: ${r.ok ? 'Available' : 'Failed — ' + r.error}`).join('\n')
+      : 'Failed: ' + resp.error;
+  } catch (e) { $('modelResults').textContent = 'Failed: ' + e.message; }
+  finally { $('testModels').disabled = false; }
 };
 
 $('clearMemory').onclick = async () => {

@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <title>Formora settings</title>
   <style>
-    body { max-width: 860px; margin: 24px auto; padding: 0 16px; font-family: system-ui, sans-serif; font-size: 14px; color: #111; }
-    h1 { color: #1C3A4B; }
+    body { max-width: 860px; margin: 0 auto; padding: 24px 16px; font-family: system-ui, sans-serif; font-size: 14px; color: #111; }
+    h1 { color: #1C3A4B; margin-top: 0; }
     h2 { font-size: 16px; margin: 28px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px 16px; }
     label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #444; }
@@ -28,26 +28,48 @@
     .entry .remove { position: absolute; top: 8px; right: 8px; padding: 2px 8px; font-size: 11px; }
     .entry .check { flex-direction: row; align-items: center; gap: 6px; }
     .entry .check input { width: auto; }
+    .welcome { padding: 20px; background: #eef4f6; border: 1px solid #dce4e8; border-radius: 12px; }
+    .welcome h2 { margin-top: 0; border: 0; }
+    .welcome ol { display: flex; flex-wrap: wrap; gap: 12px 28px; padding-left: 22px; }
+    .welcome [data-done="true"] { color: #21704c; }
+    .welcome [aria-current="step"] { font-weight: 700; }
+    .fallback-row { display: flex; gap: 8px; margin: 8px 0; }
+    .fallback-row select { flex: 1; min-width: 0; }
+    [hidden] { display: none !important; }
+    #modelResults { white-space: pre-line; }
   </style>
 </head>
 <body>
   <h1><img src="../../icons/icon48.png" alt="" style="width:28px;height:28px;vertical-align:-6px;border-radius:6px;margin-right:8px" />Formora settings</h1>
-  <p class="muted">Everything here stays in your browser's extension storage. The only outbound call is to the Gemini API with your own key.</p>
+  <p class="muted">Your settings are stored in this browser. AI extraction sends your resume to Google; AI answers send your profile, resume text and form context to Google using your key. <a href="../../privacy.html" target="_blank">Privacy policy</a></p>
+  <section id="onboarding" class="welcome" aria-label="First-time setup">
+    <h2>Welcome to Formora</h2>
+    <p>Set up once, then review every application before you submit.</p>
+    <ol id="setupSteps">
+      <li><a href="#apiKey">Add API key</a></li>
+      <li><a href="#resumeFile">Choose resume</a></li>
+      <li><a href="#extract">Extract or paste text</a></li>
+      <li><a href="#profileGrid">Review and save</a></li>
+    </ol>
+    <p id="setupHint" role="status"></p>
+  </section>
+
+  <h2>Panel appearance</h2>
+  <label>Open Formora as
+    <select id="panelLayout"><option value="dialog">Floating dialog</option><option value="sidebar">Browser side panel</option></select>
+  </label>
+  <p class="muted">The browser side panel sits beside the page without covering it. After saving, click the Formora toolbar icon to open it. The browser controls its side and width.</p>
 
   <h2>1. Gemini API</h2>
   <div class="grid">
     <label class="full">API key <input id="apiKey" type="password" placeholder="AIza..." autocomplete="off" /></label>
-    <label>Model (pick one or type any Gemini model id)
-      <input id="model" list="modelList" placeholder="gemini-3.8-flash" />
-      <datalist id="modelList">
-        <option value="gemini-3.8-flash">default, best answers</option>
-        <option value="gemini-3.5-flash-lite">cheaper, faster</option>
-        <option value="gemini-3.1-pro-preview">preview</option>
-      </datalist>
+    <label>Primary model
+      <select id="model"></select>
     </label>
-    <label class="full">Fallback models, tried in order when the model above is overloaded or rate limited (503 / 429)
-      <input id="fallbackModels" placeholder="gemini-3.5-flash-lite, gemini-3.1-pro-preview" />
-    </label>
+    <div class="full"><p>Fallback models — tried from top to bottom if a model is busy or unavailable.</p>
+      <div id="fallbackModels"></div><button id="addFallback" type="button">Add fallback</button>
+      <p id="modelHint" class="muted"></p>
+    </div>
     <label>Thinking level
       <select id="effort">
         <option value="low">low</option>
@@ -58,6 +80,8 @@
     <label><input id="overwrite" type="checkbox" style="width:auto" /> Overwrite fields that already have a value</label>
   </div>
   <div class="row"><button id="testKey">Test key</button><span id="keyMsg" class="msg"></span></div>
+  <div class="row"><button id="testModels">Test selected models</button><span class="muted">Makes a small API request per model; API charges may apply.</span></div>
+  <p id="modelResults" class="msg" role="status"></p>
 
   <h2>2. Resume</h2>
   <div class="row">
@@ -133,6 +157,7 @@
   <div class="row"><button id="clearMemory">Clear all memory</button><span id="stats" class="muted"></span></div>
 
   <div class="bar row"><button id="save" class="primary">Save everything</button><span id="saveMsg" class="msg"></span></div>
+  <script src="../lib/models.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

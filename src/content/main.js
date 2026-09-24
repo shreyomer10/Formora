@@ -110,7 +110,7 @@
     JAF.markSeen();
     if (watchTimer) return;
     watchTimer = setInterval(() => {
-      if (JAF.running || !document.getElementById('applypilot-root')) return;
+      if (JAF.running || !JAF.overlay.isVisible()) return;
       const fp = JAF.formFingerprint();
       // Frameworks re-mount single inputs on blur (Workday), and a radio choice can reveal a field
       // or two: those are the same page. A new page is when most of what we extracted is gone and
@@ -150,15 +150,23 @@
     if (JAF.running) return { questions: [] };
     JAF.running = true;
     try {
+      await JAF.overlayReady;
       return await runInner(mode);
+    } catch (e) {
+      JAF.log(e);
+      if (isTop) JAF.overlay.status('Error: ' + e.message);
+      throw e;
     } finally {
       JAF.running = false;
+      JAF.publishPanel?.();
       if (isTop) JAF.startWatch();
     }
   };
 
   async function runInner(mode) {
     const { profile, resume, settings, memory } = await loadState();
+    JAF.setDiagnosticContext(profile, resume);
+    JAF.log('Starting', mode, JAF.isGForms() ? 'Google Forms extraction' : 'generic extraction');
     const results = [];
     steps += 1;
     if (isTop) { JAF.overlay.setStep(steps); JAF.overlay.empty('Your answers will appear here in a moment.'); JAF.overlay.busy('Reading the form…'); }
@@ -170,6 +178,7 @@
     }
 
     const questions = JAF.isGForms() ? JAF.extractGForms() : JAF.extractGeneric();
+    JAF.log('extracted field count', questions.length);
     if (!questions.length) {
       if (isTop) JAF.overlay.status('No form fields found on this page.');
       return { questions: [] };
@@ -336,7 +345,7 @@
   // After a full page load inside an application the user already started, come back up
   // in a compact state so the next step is one click away.
   if (isTop && isActive()) {
-    const boot = () => { JAF.overlay.ready(); JAF.startWatch(); };
+    const boot = async () => { await JAF.overlayReady; JAF.overlay.ready(); JAF.startWatch(); };
     if (document.readyState === 'complete') setTimeout(boot, 300); else window.addEventListener('load', () => setTimeout(boot, 300), { once: true });
   }
 })();

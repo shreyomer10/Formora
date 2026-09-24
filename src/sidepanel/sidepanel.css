@@ -1,0 +1,7 @@
+html, body { margin: 0; width: 100%; height: 100%; background: #fff; }
+#applypilot-root[data-formora-ui="2"] { position: fixed; inset: 0 !important; }
+#applypilot-root[data-formora-ui="2"] .ap-panel { width: 100% !important; min-width: 0; max-width: none; height: 100dvh !important; max-height: none !important; border: 0; border-radius: 0; box-shadow: none; }
+#applypilot-root[data-formora-ui="2"] .ap-head { cursor: default; padding: 12px 14px; }
+#applypilot-root[data-formora-ui="2"] :is(.ap-resize, [data-act="min"], [data-act="close"]) { display: none; }
+#applypilot-root[data-formora-ui="2"] .ap-title { font-size: 18px; }
+#applypilot-root[data-formora-ui="2"] .ap-tools { flex-wrap: wrap; }

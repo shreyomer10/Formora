@@ -328,7 +328,7 @@ function serve() {
     expect('button dropdown: ignored selection is not counted as filled', !guards.button.ok);
     await controls.evaluate(() => {
       window.styleRequests = [];
-      window.chrome = { runtime: { getURL: () => '', sendMessage: async (msg) => { window.styleRequests.push(msg.type); return { ok: true }; } } };
+      window.chrome = { storage: { local: { get: async () => ({ settings: {} }) }, onChanged: { addListener: () => {} } }, runtime: { getURL: () => '', sendMessage: async (msg) => { window.styleRequests.push(msg.type); return { ok: true }; } } };
     });
     // Reproduce an existing tab retaining the previous release's stylesheet.
     const oldStyles = '#applypilot-root { font: 13px system-ui; } #applypilot-root .ap-status { background: #eef3f5; } #applypilot-root .ap-change { display: flex; } #applypilot-root .ap-item.ap-ok { border-left: 4px solid green; }';

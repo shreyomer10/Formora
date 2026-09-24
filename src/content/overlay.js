@@ -3,6 +3,7 @@
 // collapsible, and it stays up across the steps of a multi-page application.
 (function () {
   const JAF = window.JAF;
+  const nativePanel = !!JAF.isSidePanel;
 
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -16,8 +17,59 @@
   const MIN_W = 300, MIN_H = 360;
   const UI_VERSION = '2';
   let styleRefresh = null;
+  let layout = 'dialog';
+  let rootElement = null;
+  JAF.overlayReady = nativePanel ? Promise.resolve() : chrome.storage.local.get(['settings']).then(({ settings = {} }) => setLayout(settings.panelLayout));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (!nativePanel && area === 'local' && changes.settings) setLayout(changes.settings.newValue?.panelLayout);
+  });
+  function setLayout(value) {
+    const previous = layout;
+    layout = value === 'sidebar' ? 'sidebar' : 'dialog';
+    const r = rootElement;
+    if (!r?.querySelector('.ap-panel')) return;
+    if (layout === 'sidebar') r.remove();
+    else {
+      document.documentElement.appendChild(r); place(r, load(POS_KEY)); size(r, load(SIZE_KEY));
+      if (previous === 'sidebar' && currentResults.length && !JAF.running) { JAF.overlay.render(currentResults, reapplyHandler); JAF.overlay.summary(); }
+    }
+  }
+
+  function diagnostic() {
+    const r = root();
+    return JSON.stringify({
+      app: 'Formora', version: chrome.runtime.getManifest().version,
+      createdAt: new Date().toISOString(), site: location.origin, frame: window === window.top ? 'top' : 'embedded',
+      layout, viewport: { width: innerWidth, height: innerHeight },
+      status: JAF.redactDiagnostic(r.querySelector('.ap-status-text')?.textContent || ''),
+      applyNotes: JAF.redactDiagnostic(r.querySelector('.ap-tools-note')?.textContent || ''),
+      pageChange: r.querySelector('.ap-change')?.hidden ? '' : JAF.redactDiagnostic(r.querySelector('.ap-change')?.textContent || ''),
+      extractionLog: (JAF.diagnosticLog || []).map((entry) => ({ ...entry, message: JAF.redactDiagnostic(entry.message) })),
+      panelNotes: currentResults.map((item) => ({
+        type: item.q?.type, label: JAF.redactDiagnostic(item.q?.label || ''),
+        source: item.source, note: JAF.redactDiagnostic(item.note || ''),
+        optionCount: item.q?.options?.length,
+      })),
+    }, null, 2);
+  }
+
+  async function copyDiagnostic() {
+    const r = root(), text = JAF.getDiagnostic ? await JAF.getDiagnostic() : diagnostic();
+    const preview = r.querySelector('.ap-diagnostic-preview');
+    preview.value = text;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      r.querySelector('.ap-diagnostic-message').textContent = 'Copied. Review the report before sharing.';
+    } catch {
+      preview.hidden = false; preview.focus(); preview.select();
+      const copied = document.execCommand('copy');
+      r.querySelector('.ap-diagnostic-message').textContent = copied ? 'Copied. Review before sharing.' : 'Select and copy the report below.';
+    }
+  }
 
   function ensureStyles(r) {
+    if (nativePanel || layout === 'sidebar') return;
     // A tab can retain the previous release's injected CSS after an extension
     // reload. Ask the worker for this release's sheet when its marker is absent.
     if (getComputedStyle(r).getPropertyValue('--ap-ui-version').trim() === UI_VERSION || styleRefresh) return;
@@ -29,12 +81,15 @@
   function load(key) { try { const v = sessionStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } }
 
   function root() {
-    let r = document.getElementById('applypilot-root');
+    let r = rootElement || document.getElementById('applypilot-root');
     if (!r) {
       r = document.createElement('div');
       r.id = 'applypilot-root';
-      document.documentElement.appendChild(r);
+      // In browser-panel mode the content script keeps only a detached view model.
+      // Nothing is inserted into the application's DOM or changes its layout.
+      if (nativePanel || layout !== 'sidebar') document.documentElement.appendChild(r);
     }
+    rootElement = r;
     r.dataset.formoraUi = UI_VERSION;
     return r;
   }
@@ -63,7 +118,7 @@
   function dragOn(handle, r, onStart, onMove, onEnd) {
     let d = null;
     handle.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || e.target.closest('button')) return;
+      if (layout === 'sidebar' || e.button !== 0 || e.target.closest('button')) return;
       d = { x: e.clientX, y: e.clientY, s: onStart() };
       handle.setPointerCapture(e.pointerId);
       r.classList.add('ap-dragging');
@@ -82,6 +137,7 @@
   }
 
   function wire(r) {
+    if (nativePanel) return;
     const head = r.querySelector('.ap-head');
     dragOn(head, r,
       () => panel().getBoundingClientRect(),
@@ -110,6 +166,9 @@
   let answerSizer = null;
   let currentFilter = 'all';
   let currentResults = [];
+  let reapplyHandler = null;
+  let resultVersion = 0;
+  let changeInfo = null;
 
   function fitAnswer(textarea) {
     if (!textarea.offsetWidth) return;
@@ -183,6 +242,7 @@
           <div class="ap-panel" role="region" aria-label="Formora">
             <div class="ap-head" title="Drag to move. Double-click to reset position and size.">
               <span class="ap-title"><img class="ap-logo" alt="" src="${chrome.runtime.getURL("icons/dark/icon32.png")}" /> Formora</span><span class="ap-step"></span>
+              <button data-act="settings" title="Formora Settings" aria-label="Open Formora Settings">&#9881;</button>
               <button data-act="min" title="Collapse" aria-label="Collapse panel">&#8211;</button>
               <button data-act="close" title="Close" aria-label="Close panel">&#10005;</button>
             </div>
@@ -193,19 +253,27 @@
             <div class="ap-filters" role="group" aria-label="Filter answers" hidden><button data-filter="all" aria-pressed="true">All <span>0</span></button><button data-filter="attention" aria-pressed="false">Needs you <span>0</span></button><button data-filter="review" aria-pressed="false">AI review <span>0</span></button></div>
             <div class="ap-tools" hidden><span class="ap-tools-note"></span><button data-act="apply-all">Apply all answers</button></div>
             <div class="ap-list"></div>
+            <div class="ap-diagnostics"><button data-act="diagnostic">Copy diagnostic</button><span class="ap-diagnostic-message" role="status">Includes field labels and notes. Review before sharing.</span><textarea class="ap-diagnostic-preview" aria-label="Diagnostic report to copy" readonly hidden></textarea></div>
             <div class="ap-foot"><span aria-hidden="true">✓</span> You’re in control. Only you can submit this application.</div>
             <div class="ap-resize" title="Drag to resize"></div>
           </div>`;
         r.querySelector('[data-act="close"]').onclick = () => { JAF.overlay.hide(); if (JAF.stopWatch) JAF.stopWatch(); };
         r.querySelector('[data-act="fill"]').onclick = () => JAF.run({ mode: 'fill' });
         r.querySelector('[data-act="scan"]').onclick = () => JAF.run({ mode: 'scan' });
+        r.querySelector('[data-act="settings"]').onclick = async () => {
+          try { const response = await chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' }); if (!response.ok) throw new Error(response.error); }
+          catch (e) { this.status('Could not open Settings: ' + e.message); }
+        };
+        r.querySelector('[data-act="diagnostic"]').onclick = () => copyDiagnostic().catch(() => {
+          r.querySelector('.ap-diagnostic-message').textContent = 'Copy failed. Select the report and copy it manually.';
+        });
         r.querySelector('[data-act="min"]').onclick = () => this.minimize(!r.classList.contains('ap-min'));
         r.querySelector('[data-act="apply-all"]').onclick = () => applyAllHandler && applyAllHandler();
         r.querySelectorAll('[data-filter]').forEach((button) => { button.onclick = () => { currentFilter = button.dataset.filter; filterCards(); }; });
         wire(r);
         place(r, load(POS_KEY));
         size(r, load(SIZE_KEY));
-        if (load(MIN_KEY)) this.minimize(true);
+        if (!nativePanel && load(MIN_KEY)) this.minimize(true);
       }
       if (status != null) { r.querySelector('.ap-status-text').textContent = status; r.querySelector('.ap-spin').hidden = true; r.querySelector('.ap-progress').hidden = true; }
     },
@@ -225,7 +293,8 @@
     },
     // Status with a spinner: extraction, dropdown discovery, the model call.
     busy(text) { this.show(text); root().querySelector('.ap-spin').hidden = false; },
-    hide() { answerSizer?.disconnect(); answerSizer = null; const r = document.getElementById('applypilot-root'); if (r) r.remove(); },
+    hide() { answerSizer?.disconnect(); answerSizer = null; rootElement?.remove(); rootElement = null; currentResults = []; resultVersion++; },
+    isVisible() { return !!rootElement?.querySelector('.ap-panel'); },
     minimize(on) {
       const r = root();
       r.classList.toggle('ap-min', !!on);
@@ -238,6 +307,8 @@
     // Empty list with a hint. Used before extraction and whenever the page moves on.
     empty(text) {
       this.show();
+      currentResults = [];
+      resultVersion++;
       const list = root().querySelector('.ap-list');
       list.innerHTML = `<div class="ap-empty">${esc(text || 'No questions extracted yet.')}</div>`;
       root().querySelector('.ap-filters').hidden = true;
@@ -254,6 +325,7 @@
 
     // Multi-step forms: the page moved on. Clear the old answers, offer to fill the new step.
     pageChanged(info) {
+      changeInfo = info;
       this.show();
       const bar = root().querySelector('.ap-change');
       if (!info) { bar.hidden = true; bar.innerHTML = ''; return; }
@@ -270,6 +342,7 @@
 
     // Same page, a few new fields (a "Yes" that revealed more questions). Offer, keep the list.
     fieldsAppeared(n) {
+      changeInfo = { appeared: n };
       this.show();
       const bar = root().querySelector('.ap-change');
       bar.hidden = false;
@@ -292,6 +365,8 @@
       this.show();
       this.pageChanged(null);
       currentResults = results;
+      reapplyHandler = onReapply;
+      resultVersion++;
       currentFilter = 'all';
       const list = root().querySelector('.ap-list');
       list.innerHTML = '';
@@ -352,7 +427,7 @@
           JAF.highlight(r.q, '#1C3A4B');
           const entry = JAF.registry.get(r.q.id);
           const el = entry && (entry.el || (entry.els && entry.els[0]));
-          if (el) {
+        if (el) {
             el.scrollIntoView({ block: 'center' });
             if (manual) el.focus({ preventScroll: true });
           }
@@ -379,6 +454,7 @@
             finally { applyBtn.disabled = false; }
             applyBtn.textContent = res.ok ? 'Applied ✓' : 'Try again';
             r.source = res.ok ? 'memory' : 'fail';
+            r.note = res.note || (res.ok ? 'Your answer has been updated in the form.' : 'Please fill this answer in the form.');
             r.dirty = false;
             r.value = v;
             const nextState = stateOf(r), nextStyle = states[nextState];
@@ -445,4 +521,80 @@
       }
     },
   };
+
+  // A tab-scoped port carries data and explicit actions to the browser-owned panel.
+  // The DOM registry and actual writes stay in this document's isolated content script.
+  if (!nativePanel && window === window.top && chrome.runtime.onConnect) {
+    const ports = new Set();
+    const documentToken = crypto.randomUUID();
+    let queued = false;
+    function snapshot() {
+      const r = rootElement;
+      return {
+        documentToken, version: resultVersion, running: !!JAF.running,
+        status: r?.querySelector('.ap-status-text')?.textContent || 'Ready. Click Fill page to start.',
+        busy: r ? !r.querySelector('.ap-spin')?.hidden : false,
+        summary: r ? !r.querySelector('.ap-progress')?.hidden : false,
+        step: r?.querySelector('.ap-step')?.textContent || '',
+        change: r?.querySelector('.ap-change')?.hidden ? null : changeInfo,
+        results: currentResults.map(({ q, source, value, note }) => ({
+          source, value, note,
+          q: q ? { id: q.id, type: q.type, label: q.label, options: q.options, currentValue: q.currentValue,
+            meta: { manualFill: q.meta?.manualFill, section: q.meta?.section, optionsPartial: q.meta?.optionsPartial } } : undefined,
+        })),
+      };
+    }
+    function publish() {
+      if (queued || !ports.size) return;
+      queued = true;
+      queueMicrotask(() => {
+        queued = false;
+        const state = snapshot();
+        for (const port of ports) { try { port.postMessage({ type: 'STATE', state }); } catch { ports.delete(port); } }
+      });
+    }
+    for (const name of ['show', 'status', 'busy', 'summary', 'render', 'empty', 'ready', 'pageChanged', 'fieldsAppeared', 'setStep', 'hide']) {
+      const original = JAF.overlay[name];
+      JAF.overlay[name] = function (...args) { const result = original.apply(this, args); publish(); return result; };
+    }
+    JAF.publishPanel = publish;
+    chrome.runtime.onConnect.addListener((port) => {
+      if (port.name !== 'formora-panel' || port.sender?.id !== chrome.runtime.id) return;
+      ports.add(port);
+      port.onDisconnect.addListener(() => ports.delete(port));
+      JAF.overlayReady.then(() => {
+        if (!JAF.overlay.isVisible()) JAF.overlay.ready();
+        JAF.startWatch?.();
+        publish();
+      });
+      port.onMessage.addListener(async (msg) => {
+        try {
+          await JAF.overlayReady;
+          let result = { ok: true };
+          if (msg.action === 'fill' || msg.action === 'scan') await JAF.run({ mode: msg.action });
+          else if (msg.action === 'diagnostic') result = { ok: true, text: diagnostic() };
+          else if (msg.action === 'dismiss') { changeInfo = null; JAF.overlay.pageChanged(null); JAF.markSeen?.(true); }
+          else {
+            if (msg.documentToken !== documentToken || msg.version !== resultVersion || JAF.running) throw new Error('The page changed. Preview fields again before applying an answer.');
+            const entry = currentResults.find((r) => r.q?.id === msg.id);
+            if (!entry) throw new Error('This field is no longer on the current page.');
+            const registered = JAF.registry.get(msg.id);
+            const element = registered?.el || registered?.els?.[0];
+            if (!element?.isConnected) throw new Error('This field was replaced. Preview fields again.');
+            if (msg.action === 'apply') {
+              if (!reapplyHandler || entry.source === 'manual' || entry.q.meta?.manualFill || entry.q.type === 'file') throw new Error('Fill this field directly in the form.');
+              result = await reapplyHandler(entry.q, msg.value);
+              entry.value = msg.value; entry.source = result.ok ? 'memory' : 'fail'; entry.note = result.note || '';
+            } else if (msg.action === 'locate') {
+              JAF.highlight(entry.q, '#1C3A4B'); element.scrollIntoView({ block: 'center' });
+              element.focus({ preventScroll: true });
+            } else throw new Error('Unknown panel action.');
+          }
+          port.postMessage({ type: 'REPLY', requestId: msg.requestId, result });
+        } catch (e) {
+          try { port.postMessage({ type: 'REPLY', requestId: msg.requestId, result: { ok: false, note: e.message } }); } catch { /* panel closed */ }
+        }
+      });
+    });
+  }
 })();

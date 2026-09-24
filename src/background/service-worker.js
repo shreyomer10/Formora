@@ -2,10 +2,10 @@
 // Raw fetch is used because this is a no-build extension (no npm SDK available).
 // Uses the Gemini Interactions API (generateContent is marked legacy).
 
+import '../lib/models.js';
 const API_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-const DEFAULT_MODEL = 'gemini-3.8-flash';
+const DEFAULT_MODEL = FormoraModels.primary;
 // Tried in order when the chosen model is overloaded (503), rate limited (429) or down (5xx).
-const DEFAULT_FALLBACKS = ['gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'];
 const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -170,6 +170,7 @@ async function callGemini(body, settings) {
     }
     const err = new Error(`API ${res.status}: ${String(msg).slice(0, 300)}`);
     err.retryable = RETRYABLE.has(res.status);
+    err.unavailable = res.status === 404 || res.status === 410;
     throw err;
   }
   const data = await res.json();
@@ -184,12 +185,11 @@ async function callGemini(body, settings) {
 }
 
 function fallbackModels(settings) {
-  const raw = typeof settings.fallbackModels === 'string' ? settings.fallbackModels : DEFAULT_FALLBACKS.join(', ');
-  return raw.split(/[,\s]+/).map((m) => m.trim()).filter((m) => /^gemini-/i.test(m));
+  return FormoraModels.parse(settings.fallbackModels);
 }
 
 // Try the chosen model (twice, the second time after a pause), then each fallback model once.
-// Only overload / rate-limit / server / network errors move on; bad requests fail immediately.
+// Transient errors retry; missing/retired models move on directly. Bad requests fail immediately.
 async function callWithFallback(body, settings) {
   const primary = modelFor(settings);
   const chain = [primary, ...fallbackModels(settings).filter((m) => m !== primary)];
@@ -200,11 +200,12 @@ async function callWithFallback(body, settings) {
     for (let a = 0; a < attempts; a++) {
       try {
         const r = await callGemini({ ...body, model }, settings);
-        const fallbackNote = tried.length ? `${primary} failed (${tried[0].split(': ').slice(1).join(': ').slice(0, 80)}); answered by ${model}` : '';
+        const fallbackNote = tried.length ? `${primary} failed; ${[...new Set(tried)].join(' | ')}; answered by ${model}` : '';
         return { ...r, model, fallbackNote };
       } catch (e) {
-        if (!e.retryable) throw e;
+        if (!e.retryable && !e.unavailable) throw e;
         tried.push(`${model}: ${e.message}`);
+        if (e.unavailable) break;
         await sleep(a === 0 ? 1200 : 2500);
       }
     }
@@ -280,12 +281,47 @@ async function setToolbarIcon(dark) {
 }
 chrome.storage.local.get(['ui']).then(({ ui }) => { if (ui && typeof ui.dark === 'boolean') setToolbarIcon(ui.dark); });
 
+let panelLayout = 'dialog';
+async function configurePanel(settings = {}) {
+  panelLayout = settings.panelLayout === 'sidebar' ? 'sidebar' : 'dialog';
+  if (!chrome.sidePanel?.open) return;
+  const native = panelLayout === 'sidebar';
+  await chrome.sidePanel.setOptions({ path: 'src/sidepanel/sidepanel.html', enabled: native });
+  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: native });
+  await chrome.action.setPopup({ popup: native ? '' : 'src/popup/popup.html' });
+}
+chrome.storage.local.get(['settings']).then(({ settings }) => configurePanel(settings)).catch(console.error);
+chrome.storage.onChanged?.addListener((changes, area) => {
+  if (area === 'local' && changes.settings) configurePanel(changes.settings.newValue).catch(console.error);
+});
+
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === 'install') chrome.runtime.openOptionsPage();
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
       if (msg.type === 'REFRESH_OVERLAY_STYLES' && _sender.tab?.id != null) {
         await chrome.scripting.insertCSS({ target: { tabId: _sender.tab.id, frameIds: [_sender.frameId ?? 0] }, files: ['src/content/overlay.css'] });
         sendResponse({ ok: true });
+      }
+      else if (msg.type === 'OPEN_OPTIONS') { await chrome.runtime.openOptionsPage(); sendResponse({ ok: true }); }
+      else if (msg.type === 'TEST_MODELS') {
+        const { settings = {} } = await chrome.storage.local.get(['settings']);
+        if (!settings.apiKey) throw new Error('Add an API key first.');
+        const results = [];
+        for (const model of [...new Set([modelFor(settings), ...fallbackModels(settings)])]) {
+          try {
+            const r = await callGemini({ model, input: 'Return JSON with ok set to true.',
+              generation_config: { thinking_level: settings.effort || 'medium', max_output_tokens: 1024 },
+              response_format: jsonFormat({ type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false }),
+            }, settings);
+            if (JSON.parse(r.text).ok !== true) throw new Error('Unexpected test response.');
+            results.push({ model, ok: true });
+          } catch (e) { results.push({ model, ok: false, error: e.message }); }
+        }
+        sendResponse({ ok: true, results });
       }
       else if (msg.type === 'COLOR_SCHEME') { await setToolbarIcon(!!msg.dark); sendResponse({ ok: true }); }
       else if (msg.type === 'LLM_FILL') sendResponse({ ok: true, ...(await llmFill(msg.payload)) });
@@ -309,8 +345,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-async function sendToActiveTab(type) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+async function sendToActiveTab(type, commandTab) {
+  const tab = commandTab || (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
   if (!tab || !tab.id) return;
   // Refresh styles even when a content script already exists in an older tab.
   await chrome.scripting.insertCSS({ target: { tabId: tab.id, allFrames: true }, files: ['src/content/overlay.css'] });
@@ -326,6 +362,11 @@ async function sendToActiveTab(type) {
   }
 }
 
-chrome.commands.onCommand.addListener((cmd) => {
-  if (cmd === 'fill-page') sendToActiveTab('FILL_PAGE');
+chrome.commands.onCommand.addListener((cmd, tab) => {
+  if (cmd !== 'fill-page') return;
+  // Invoke before any asynchronous work so Chrome retains the keyboard gesture.
+  if (panelLayout === 'sidebar' && chrome.sidePanel?.open && tab?.windowId != null) {
+    chrome.sidePanel.open({ windowId: tab.windowId }).catch(console.error);
+  }
+  sendToActiveTab('FILL_PAGE', tab).catch(console.error);
 });

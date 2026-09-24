@@ -18,7 +18,7 @@ It reads every question on the page, fills the factual ones from your stored pro
 ## Install (unpacked)
 
 1. `chrome://extensions` > enable **Developer mode** > **Load unpacked** > pick this folder.
-2. Click the extension icon > **Profile, resume & API key**.
+2. First install opens **Formora Settings** with a setup guide. You can return through the panel gear button or the extension popup.
 3. Paste your Gemini API key (from Google AI Studio), choose a resume PDF, click **Extract profile + text from PDF with AI**, review the fields (including the extracted job / education / certification lists in section 3b), **Save everything**.
 4. Open any application page, press **Alt+Shift+F** or click **Fill this page**.
 
@@ -40,18 +40,18 @@ Needs Chrome installed (set `CHROME_PATH` if it is not in the default location).
 
 - The key is stored in `chrome.storage.local`, which lives unencrypted inside your Chrome profile on disk. Anyone who can read your Chrome profile folder (other users of the same Windows account, malware running as you) can read it. Treat it like a saved password.
 - Web pages never see it. Only the service worker reads the key and makes API calls; the content script that runs on job sites only learns whether a key exists. Content scripts run in an isolated world, so page JavaScript cannot read their variables anyway.
-- The only network destination is `generativelanguage.googleapis.com` (the manifest's `host_permissions` allow nothing else). Every request is sent with `store: false`, so Google does not keep the interaction for later retrieval.
-- Your resume, profile and the page's questions are sent to Google with each fill. On the free tier Google may use API inputs to improve its products; on a billed project it does not. Check the current Gemini API terms if that matters to you.
+- The only network destination is `generativelanguage.googleapis.com` (the manifest's `host_permissions` allow nothing else). Every request is sent with `store: false` to disable interaction retrieval; this does not override Google's separate safety logging and data retention terms.
+- Your resume, profile and the page's questions are sent to Google with each fill. Google's unpaid-service terms say not to send personal, sensitive or confidential information. Use a suitable paid project for personal resume data and review the [Gemini terms](https://ai.google.dev/gemini-api/terms). See the bundled [privacy policy](privacy.html).
 - Harden the key in Google AI Studio / Cloud Console: restrict it to the Generative Language API only, set a daily quota, and rotate it if you ever paste it somewhere by mistake. Never commit it; nothing in this repo stores it in a file.
 
 ## Notes
 
 - Searchable dropdowns (including Workday Skills and Field of Study) are temporarily manual-only. The review panel shows the suggested value and **Fill manually**; use **Locate** to search and select on the form. These fields are excluded from automatic filling and **Apply all**. Native selects and button dropdowns, such as Degree, still autofill.
 - API calls go from the extension's service worker straight to `generativelanguage.googleapis.com` (Interactions API, `store: false`); the key is never exposed to web pages.
-- Default model is `gemini-3.8-flash` at medium thinking level. Any Gemini model id can be typed into the model field. Fallback models (default `gemini-3.5-flash-lite, gemini-3.1-pro-preview`) are tried in order when the chosen one returns 503 / 429 / 5xx.
+- Default model is `gemini-3.8-flash` at medium thinking level. Choose the primary model and up to two ordered fallbacks from dropdowns. Defaults are `gemini-3.5-flash-lite` and `gemini-3.1-pro-preview`. Settings preserves previously saved custom IDs and offers **Test selected models** to check each one independently. Transient failures retry; missing/retired models (404/410) move to the next selection and appear in panel notes. See `store/MODEL-RELEASE-CHECK.md` for release maintenance.
 - Profile, resume and answers sit in the system instruction, so repeated applications share the same prefix and benefit from Gemini's implicit caching (cached tokens are shown in the stats line).
 - Google Forms file uploads go to your own Google Drive through a picker iframe. The extension clicks **Add file**, and its content script inside the picker hands the stored resume to the picker's upload input. This needs you to be signed in to Google and is best-effort: the panel reports whether the form shows the file afterwards, and says to attach manually when it does not.
-- Profile fields for 10th and 12th percentage, graduation CGPA and college roll / enrollment number are filled by rules and never sent to the model; the model is told to skip marks, IDs and dates it does not have rather than estimate them.
+- Profile fields for 10th and 12th percentage, graduation CGPA and college roll / enrollment number are filled by rules; the profile is also included as context when an AI request is needed, and the model is told to skip marks, IDs and dates it does not have rather than estimate them.
 - `BRAND.md` is a three-step prompt chain (name, then theme from the name, then logo from both) to run yourself; the current name and colours are placeholders.
 - Multi-step forms (Workday): the panel notices each new step and offers to fill it; nothing runs without a click.
 - Repeatable sections need entries in options section 3b. With none stored the section is left untouched and the panel says so.
@@ -77,3 +77,13 @@ test/e2e/run.js                    puppeteer end-to-end test
 test/e2e/fallback.test.js          service worker model-fallback unit test
 test/e2e/debug.js                  fill one page and dump what was extracted
 ```
+
+## Settings, support and store preparation
+
+- **Panel appearance** selects a floating dialog (default) or native browser side panel. In side-panel mode, the toolbar icon opens the browser panel and the application gets its own resized viewport. The browser controls which side and width to use. The gear opens Settings; the floating dialog also retains minimize and close controls. Dialog position/size remain remembered when switching layouts.
+- **Copy diagnostic** copies the current run's bounded extraction log, field labels, result states and panel notes, with no answer-value or resume-body fields. Known profile strings and common sensitive patterns are filtered, but review labels and notes before sharing. If clipboard access fails, a selectable report appears. Reports are never sent automatically.
+- First installation opens a four-step setup guide. Resume upload preserves unsaved settings; extraction leaves the result for review and explicit saving.
+- Publisher/support: Shrey Omer, shreyomer10@gmail.com. Privacy policy: `privacy.html`. Store copy, screenshots and promotional assets: `store/`. The preliminary name check found other Formora software: see `store/NAME-CHECK.md` before publication.
+- `npm run test:features` covers setup, settings, the native browser side panel, active-tab routing, navigation, remote edits and diagnostics in Chrome using synthetic data and mocked AI. `npm run assets` regenerates store assets. These tests do not call live Gemini or establish model availability.
+
+The native panel requires a Chromium browser implementing `chrome.sidePanel` (Chrome 116+ for programmatic opening). On a browser without that API, select Floating dialog. There is no page-docked sidebar fallback. Side-panel updates travel over a tab-scoped extension port and are not persisted to storage.
