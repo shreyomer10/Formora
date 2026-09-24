@@ -159,22 +159,5 @@
     return [];
   };
 
-  JAF.diagnosticLog = [];
-  let diagnosticSecrets = [];
-  JAF.setDiagnosticContext = (profile, resume) => {
-    const strings = (value) => typeof value === 'string' ? [value] : value && typeof value === 'object' ? Object.values(value).flatMap(strings) : [];
-    diagnosticSecrets = strings(profile).concat(resume?.fileName || '').filter((s) => s.length >= 3).sort((a, b) => b.length - a.length);
-    JAF.diagnosticLog = [];
-  };
-  JAF.redactDiagnostic = (value) => {
-    let text = String(value).replace(/AIza[\w-]+/g, '[key]').replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, '[email]')
-      .replace(/https?:\/\/[^\s)]+/gi, '[url]').replace(/\+?\d[\d ()-]{7,}\d/g, '[number]');
-    for (const secret of diagnosticSecrets) text = text.split(secret).join('[profile]');
-    return text.slice(0, 4000);
-  };
-  JAF.log = (...a) => {
-    console.log('%c[ApplyPilot]', 'color:#1c3a4b;font-weight:bold', ...a);
-    JAF.diagnosticLog.push({ time: new Date().toISOString(), message: JAF.redactDiagnostic(a.map((x) => x instanceof Error ? x.message : String(x)).join(' ')) });
-    if (JAF.diagnosticLog.length > 150) JAF.diagnosticLog.shift();
-  };
+  JAF.log = (...a) => console.log('%c[ApplyPilot]', 'color:#1c3a4b;font-weight:bold', ...a);
 })();

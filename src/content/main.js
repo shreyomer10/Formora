@@ -165,7 +165,6 @@
 
   async function runInner(mode) {
     const { profile, resume, settings, memory } = await loadState();
-    JAF.setDiagnosticContext(profile, resume);
     JAF.log('Starting', mode, JAF.isGForms() ? 'Google Forms extraction' : 'generic extraction');
     const results = [];
     steps += 1;

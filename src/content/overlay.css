@@ -79,8 +79,3 @@
 @keyframes ap-shine { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { #applypilot-root[data-formora-ui="2"] *, #applypilot-root[data-formora-ui="2"] *::before, #applypilot-root[data-formora-ui="2"] *::after { animation: none !important; transition: none !important; } }
 @media (max-width: 380px) { #applypilot-root[data-formora-ui="2"] .ap-head, #applypilot-root[data-formora-ui="2"] .ap-status { padding: 12px; } #applypilot-root[data-formora-ui="2"] .ap-list { padding: 10px; } #applypilot-root[data-formora-ui="2"] .ap-filters { padding-inline: 10px; } #applypilot-root[data-formora-ui="2"] .ap-tools { flex-wrap: wrap; padding-inline: 12px; } }
-
-#applypilot-root[data-formora-ui="2"] .ap-diagnostics { flex: none; padding: 8px 18px; border-top: 1px solid var(--ap-border); }
-#applypilot-root[data-formora-ui="2"] .ap-diagnostic-message { display: block; font-size: 10px; color: var(--ap-muted); margin-top: 4px; }
-#applypilot-root[data-formora-ui="2"] .ap-diagnostic-preview { width: 100%; height: 100px; }
-#applypilot-root[data-formora-ui="2"].ap-min .ap-diagnostics { display: none; }

@@ -14,7 +14,7 @@ async function run(assets = false) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   let browser;
   try {
-    browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, pipe: true, enableExtensions: [EXT], args: ['--no-first-run', '--no-default-browser-check'] });
+    browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, defaultViewport: null, pipe: true, enableExtensions: [EXT], args: ['--no-first-run', '--no-default-browser-check'] });
     const target = await browser.waitForTarget((t) => t.type() === 'service_worker');
     const id = new URL(target.url()).host;
     const optionsUrl = `chrome-extension://${id}/src/options/options.html`;
@@ -84,29 +84,30 @@ async function run(assets = false) {
       } });
     });
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 800 });
     const origin = `http://127.0.0.1:${server.address().port}`;
     await page.goto(origin);
     await page.waitForFunction(() => !!document.querySelector('#fn'));
+    const originalWidth = await page.evaluate(() => innerWidth);
     const appTabId = await options.evaluate(async () => {
       const tabs = await chrome.tabs.query({}); const tab = tabs.find((t) => t.url?.startsWith('http://127.0.0.1')) || tabs.at(-1);
       await chrome.tabs.sendMessage(tab.id, { type: 'FILL_PAGE' });
       return tab.id;
     });
     assert.equal(await page.$('#applypilot-root'), null, 'native mode inserts no panel in the website');
-    assert.equal(await page.evaluate(() => innerWidth), 1280, 'no content-script layout change');
+    assert.equal(await options.evaluate(() => chrome.action.getPopup({})), '', 'toolbar opens the native panel directly');
+    assert.equal(await page.evaluate(() => innerWidth), originalWidth, 'no content-script layout change');
     await page.bringToFront();
     const browserWindowId = await options.evaluate(async (id) => (await chrome.tabs.get(id)).windowId, appTabId);
     await options.evaluate((id) => chrome.windows.update(id, { left: 0, top: 0, width: 1000, height: 800 }), browserWindowId);
-    const applicationSession = await page.createCDPSession();
-    await applicationSession.send('Emulation.clearDeviceMetricsOverride');
+    await page.waitForFunction(() => outerWidth === 1000);
     const fullPageWidth = await page.evaluate(() => innerWidth);
     await options.evaluate((windowId) => chrome.sidePanel.open({ windowId }), browserWindowId);
     const nativeTarget = await browser.waitForTarget((t) => t.url().includes('/src/sidepanel/sidepanel.html'));
     const native = await nativeTarget.asPage();
     assert(native, 'browser creates a real native side-panel document');
     await native.waitForSelector('.ap-item');
-    console.log('Native browser panel viewport metrics:', fullPageWidth, await page.evaluate(() => ({ inner: innerWidth, outer: outerWidth })), await native.evaluate(() => ({ inner: innerWidth, outer: outerWidth })));
+    await page.waitForFunction((width) => innerWidth < width, {}, fullPageWidth);
+    console.log('Native browser panel resized application viewport:', fullPageWidth, '->', await page.evaluate(() => innerWidth));
     assert.equal(await page.$('#applypilot-root'), null, 'native panel never overlays the web page');
     assert((await native.$eval('.ap-status-text', (e) => e.textContent)).includes('Filled'));
     // Apply a reviewed answer across the tab-scoped connection.
@@ -116,11 +117,6 @@ async function run(assets = false) {
       item.querySelector('[data-act=apply]').click();
     });
     await page.waitForFunction(() => document.getElementById('why').value === 'I enjoy building payment systems.');
-    await native.click('[data-act=diagnostic]');
-    await native.waitForFunction(() => document.querySelector('.ap-diagnostic-preview').value.includes('extractionLog'));
-    const nativeReport = JSON.parse(await native.$eval('.ap-diagnostic-preview', (e) => e.value));
-    assert.equal(nativeReport.site, origin);
-    assert(!JSON.stringify(nativeReport).includes('asha@example.com'));
     if (assets) await native.screenshot({ path: path.join(out, 'native-panel-reference.png') });
     // Switching tabs must discard the previous application's fields and edit destination.
     const second = await browser.newPage();
@@ -150,29 +146,16 @@ async function run(assets = false) {
     await options.reload(); await options.waitForSelector('#model option');
     await options.select('#panelLayout', 'dialog'); await options.click('#save');
     await page.waitForSelector('#applypilot-root .ap-panel');
+    await options.waitForFunction(async () => (await chrome.action.getPopup({})).endsWith('/src/popup/popup.html'));
     await page.setViewport({ width: 1280, height: 800 });
     await page.bringToFront();
     if (assets) await page.screenshot({ path: path.join(out, '02-dialog.png') });
-    await browser.defaultBrowserContext().overridePermissions(origin, ['clipboard-read', 'clipboard-write']);
-    await page.click('[data-act=diagnostic]');
-    await page.waitForFunction(() => document.querySelector('.ap-diagnostic-message').textContent.startsWith('Copied'));
-    const report = await page.evaluate(() => navigator.clipboard.readText());
-    const parsed = JSON.parse(report);
-    assert(parsed.extractionLog.length > 0 && parsed.panelNotes.length > 0);
-    assert(!report.includes('asha@example.com') && !report.includes('fake-test-key') && !report.includes('backend engineer'));
-    assert(!parsed.panelNotes.some((n) => 'value' in n));
-    // Unavailable clipboard still gives a manually selectable report.
-    await browser.defaultBrowserContext().overridePermissions(origin, []);
-    await page.click('[data-act=diagnostic]');
-    await page.waitForFunction(() => !document.querySelector('.ap-diagnostic-preview').hidden);
-    assert((await page.$eval('.ap-diagnostic-preview', (e) => e.value)).includes('extractionLog'));
-    // New scan with zero fields must not export stale notes from the prior page.
+    // A scan of an empty page clears the previous results.
     await page.evaluate(() => document.querySelectorAll('body > *').forEach((e) => e.remove()));
     await options.evaluate(async (tabId) => {
       await chrome.tabs.sendMessage(tabId, { type: 'SCAN_PAGE' });
     }, appTabId);
-    await page.click('[data-act=diagnostic]');
-    await page.waitForFunction(() => JSON.parse(document.querySelector('.ap-diagnostic-preview').value).panelNotes.length === 0);
+    await page.waitForFunction(() => !document.querySelector('#applypilot-root .ap-item'));
     if (assets) {
       const promo = await browser.newPage();
       const logo = fs.readFileSync(path.join(EXT, 'icons/icon128.png')).toString('base64');
@@ -183,7 +166,7 @@ async function run(assets = false) {
       }
       fs.copyFileSync(path.join(EXT, 'icons/icon128.png'), path.join(out, 'icon128.png'));
     }
-    console.log('PASS: install onboarding, resume upload/extraction/review/save, model selection and tests, native side panel/tab switching/remote editing/dialog/settings, clipboard and fallback, diagnostic privacy and stale-state clearing' + (assets ? '; store assets generated' : ''));
+    console.log('PASS: install onboarding, resume upload/extraction/review/save, model selection and tests, native side panel/tab switching/remote editing/dialog/settings, and stale-state clearing' + (assets ? '; store assets generated' : ''));
   } finally { if (browser) await browser.close(); await new Promise((resolve) => server.close(resolve)); }
 }
 module.exports = run;

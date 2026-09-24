@@ -22,7 +22,6 @@ Formora reads application questions and fills supported fields from your saved p
 - Prepare repeated work experience, education and certification sections.
 - Review AI answers, locate manual fields and apply your edits.
 - Choose up to two fallback models and test every selected model.
-- Copy a diagnostic report when a page does not work as expected.
 
 Compatibility varies by site. Searchable dropdowns may need manual selection. AI can make mistakes: review every answer. Formora never submits applications automatically. Gemini API charges and Google's data terms apply. PDF supports AI extraction; other resume formats require pasted text.
 

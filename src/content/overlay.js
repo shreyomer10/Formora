@@ -35,39 +35,6 @@
     }
   }
 
-  function diagnostic() {
-    const r = root();
-    return JSON.stringify({
-      app: 'Formora', version: chrome.runtime.getManifest().version,
-      createdAt: new Date().toISOString(), site: location.origin, frame: window === window.top ? 'top' : 'embedded',
-      layout, viewport: { width: innerWidth, height: innerHeight },
-      status: JAF.redactDiagnostic(r.querySelector('.ap-status-text')?.textContent || ''),
-      applyNotes: JAF.redactDiagnostic(r.querySelector('.ap-tools-note')?.textContent || ''),
-      pageChange: r.querySelector('.ap-change')?.hidden ? '' : JAF.redactDiagnostic(r.querySelector('.ap-change')?.textContent || ''),
-      extractionLog: (JAF.diagnosticLog || []).map((entry) => ({ ...entry, message: JAF.redactDiagnostic(entry.message) })),
-      panelNotes: currentResults.map((item) => ({
-        type: item.q?.type, label: JAF.redactDiagnostic(item.q?.label || ''),
-        source: item.source, note: JAF.redactDiagnostic(item.note || ''),
-        optionCount: item.q?.options?.length,
-      })),
-    }, null, 2);
-  }
-
-  async function copyDiagnostic() {
-    const r = root(), text = JAF.getDiagnostic ? await JAF.getDiagnostic() : diagnostic();
-    const preview = r.querySelector('.ap-diagnostic-preview');
-    preview.value = text;
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
-      await navigator.clipboard.writeText(text);
-      r.querySelector('.ap-diagnostic-message').textContent = 'Copied. Review the report before sharing.';
-    } catch {
-      preview.hidden = false; preview.focus(); preview.select();
-      const copied = document.execCommand('copy');
-      r.querySelector('.ap-diagnostic-message').textContent = copied ? 'Copied. Review before sharing.' : 'Select and copy the report below.';
-    }
-  }
-
   function ensureStyles(r) {
     if (nativePanel || layout === 'sidebar') return;
     // A tab can retain the previous release's injected CSS after an extension
@@ -137,7 +104,11 @@
   }
 
   function wire(r) {
-    if (nativePanel) return;
+    if (nativePanel) {
+      answerSizer = new ResizeObserver(() => r.querySelectorAll('textarea').forEach(fitAnswer));
+      answerSizer.observe(panel());
+      return;
+    }
     const head = r.querySelector('.ap-head');
     dragOn(head, r,
       () => panel().getBoundingClientRect(),
@@ -253,7 +224,6 @@
             <div class="ap-filters" role="group" aria-label="Filter answers" hidden><button data-filter="all" aria-pressed="true">All <span>0</span></button><button data-filter="attention" aria-pressed="false">Needs you <span>0</span></button><button data-filter="review" aria-pressed="false">AI review <span>0</span></button></div>
             <div class="ap-tools" hidden><span class="ap-tools-note"></span><button data-act="apply-all">Apply all answers</button></div>
             <div class="ap-list"></div>
-            <div class="ap-diagnostics"><button data-act="diagnostic">Copy diagnostic</button><span class="ap-diagnostic-message" role="status">Includes field labels and notes. Review before sharing.</span><textarea class="ap-diagnostic-preview" aria-label="Diagnostic report to copy" readonly hidden></textarea></div>
             <div class="ap-foot"><span aria-hidden="true">✓</span> You’re in control. Only you can submit this application.</div>
             <div class="ap-resize" title="Drag to resize"></div>
           </div>`;
@@ -264,9 +234,6 @@
           try { const response = await chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' }); if (!response.ok) throw new Error(response.error); }
           catch (e) { this.status('Could not open Settings: ' + e.message); }
         };
-        r.querySelector('[data-act="diagnostic"]').onclick = () => copyDiagnostic().catch(() => {
-          r.querySelector('.ap-diagnostic-message').textContent = 'Copy failed. Select the report and copy it manually.';
-        });
         r.querySelector('[data-act="min"]').onclick = () => this.minimize(!r.classList.contains('ap-min'));
         r.querySelector('[data-act="apply-all"]').onclick = () => applyAllHandler && applyAllHandler();
         r.querySelectorAll('[data-filter]').forEach((button) => { button.onclick = () => { currentFilter = button.dataset.filter; filterCards(); }; });
@@ -572,7 +539,6 @@
           await JAF.overlayReady;
           let result = { ok: true };
           if (msg.action === 'fill' || msg.action === 'scan') await JAF.run({ mode: msg.action });
-          else if (msg.action === 'diagnostic') result = { ok: true, text: diagnostic() };
           else if (msg.action === 'dismiss') { changeInfo = null; JAF.overlay.pageChanged(null); JAF.markSeen?.(true); }
           else {
             if (msg.documentToken !== documentToken || msg.version !== resultVersion || JAF.running) throw new Error('The page changed. Preview fields again before applying an answer.');
@@ -585,6 +551,7 @@
               if (!reapplyHandler || entry.source === 'manual' || entry.q.meta?.manualFill || entry.q.type === 'file') throw new Error('Fill this field directly in the form.');
               result = await reapplyHandler(entry.q, msg.value);
               entry.value = msg.value; entry.source = result.ok ? 'memory' : 'fail'; entry.note = result.note || '';
+              JAF.overlay.summary();
             } else if (msg.action === 'locate') {
               JAF.highlight(entry.q, '#1C3A4B'); element.scrollIntoView({ block: 'center' });
               element.focus({ preventScroll: true });

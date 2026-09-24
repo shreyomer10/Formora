@@ -25,18 +25,16 @@ function request(action, data = {}) {
 }
 
 JAF.run = async ({ mode }) => {
+  const owner = binding;
   const result = await request(mode);
-  if (!result.ok) JAF.overlay.status(result.note);
+  if (owner === binding && !result.ok) JAF.overlay.status(result.note);
 };
 JAF.markSeen = () => request('dismiss');
 JAF.registry = new Map();
-JAF.highlight = (q) => request('locate', { id: q.id }).then((r) => { if (!r.ok) JAF.overlay.status(r.note); });
-JAF.getDiagnostic = async () => {
-  const r = await request('diagnostic');
-  if (!r.ok) throw new Error(r.note);
-  return r.text;
+JAF.highlight = (q) => {
+  const owner = binding;
+  return request('locate', { id: q.id }).then((r) => { if (owner === binding && !r.ok) JAF.overlay.status(r.note); });
 };
-
 function render(next) {
   const changed = !state || state.documentToken !== next.documentToken || state.version !== next.version;
   state = next;
