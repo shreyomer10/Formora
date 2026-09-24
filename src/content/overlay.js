@@ -184,14 +184,14 @@
       t.querySelector('.ap-tools-note').textContent = note || '';
     },
 
-    // results: [{q, source:'profile'|'memory'|'ai'|'skip'|'fail'|'pending'|'info', value, note}]
+    // results: [{q, source:'profile'|'memory'|'ai'|'manual'|'skip'|'fail'|'pending'|'info', value, note}]
     // 'pending' items are placeholders for answers the model is still producing.
     render(results, onReapply) {
       this.show();
       this.pageChanged(null);
       const list = root().querySelector('.ap-list');
       list.innerHTML = '';
-      const order = { info: 0, pending: 1, fail: 2, skip: 3, ai: 4, memory: 5, profile: 6 };
+      const order = { info: 0, pending: 1, manual: 2, fail: 3, skip: 4, ai: 5, memory: 6, profile: 7 };
       results.sort((a, b) => order[a.source] - order[b.source]);
       const editors = []; // for Apply all
       for (const r of results) {
@@ -208,9 +208,10 @@
           list.appendChild(item);
           continue;
         }
-        const cls = r.source === 'fail' ? 'ap-fail' : r.source === 'skip' ? 'ap-skip' : r.source === 'ai' ? 'ap-ai' : 'ap-ok';
+        const manual = r.source === 'manual' || !!r.q.meta?.manualFill;
+        const cls = r.source === 'fail' ? 'ap-fail' : manual || r.source === 'skip' ? 'ap-skip' : r.source === 'ai' ? 'ap-ai' : 'ap-ok';
         item.className = `ap-item ${cls}`;
-        const editable = ['ai', 'memory', 'skip', 'fail'].includes(r.source) && r.q.type !== 'file';
+        const editable = !manual && ['ai', 'memory', 'skip', 'fail'].includes(r.source) && r.q.type !== 'file';
         const valueText = Array.isArray(r.value) ? r.value.join(', ') : (r.value ?? '');
         const opts = r.q.options || [];
         // Option questions get a real selector so "Apply" can only send values the page accepts.
@@ -233,9 +234,9 @@
         }
         const section = r.q.meta && r.q.meta.section && !same(r.q.meta.section, r.q.label) ? `<span class="ap-badge ap-sec">${esc(r.q.meta.section)}</span>` : '';
         item.innerHTML = `
-          <div class="ap-label">${esc(r.q.label)}<span class="ap-badge">${esc(r.source)}</span><span class="ap-badge">${esc(r.q.type)}</span>${section}</div>
+          <div class="ap-label">${esc(r.q.label)}<span class="ap-badge">${manual ? 'Fill manually' : esc(r.source)}</span><span class="ap-badge">${esc(r.q.type)}</span>${section}</div>
           ${editor}
-          ${r.note ? `<div class="ap-note">${esc(r.note)}</div>` : ''}
+          ${r.note || manual ? `<div class="ap-note">${esc(manual ? r.q.meta?.manualFill || r.note : r.note)}</div>` : ''}
           ${opts.length && kind === 'text' ? `<div class="ap-note ap-opts">Options${r.q.meta?.optionsPartial ? ' (partial)' : ''}: ${esc(opts.join(' | '))}</div>` : ''}
           ${editable ? `<div class="ap-row"><button class="ap-primary" data-act="apply">Apply</button><button data-act="locate">Locate</button></div>` : `<div class="ap-row"><button data-act="locate">Locate</button></div>`}`;
         item.querySelector('.ap-label').onclick = () => JAF.highlight(r.q, '#1C3A4B');
@@ -243,7 +244,10 @@
           JAF.highlight(r.q, '#1C3A4B');
           const entry = JAF.registry.get(r.q.id);
           const el = entry && (entry.el || (entry.els && entry.els[0]));
-          if (el) el.scrollIntoView({ block: 'center' });
+          if (el) {
+            el.scrollIntoView({ block: 'center' });
+            if (manual) el.focus({ preventScroll: true });
+          }
         };
         const applyBtn = item.querySelector('[data-act="apply"]');
         if (applyBtn) {

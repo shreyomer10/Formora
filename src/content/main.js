@@ -175,7 +175,11 @@
       return { questions: [] };
     }
     JAF.log('extracted', questions.length, questions.map((q) => `${q.label} [${q.type}${q.meta?.entry ? ' ' + q.meta.entry.kind + q.meta.entry.index : ''}]`).join(' | '));
-    if (questions.some((q) => q.type === 'combobox' && !q.options.length && !q.currentValue && !q.meta?.multi)) {
+    for (const q of questions) {
+      const reason = JAF.manualFillReason(q);
+      if (reason) q.meta = { ...q.meta, manualFill: reason };
+    }
+    if (questions.some((q) => q.type === 'combobox' && !q.options.length && !q.currentValue && !q.meta?.manualFill)) {
       JAF.overlay.busy(`Found ${questions.length} question(s). Reading dropdown options...`);
       const n = await JAF.discoverOptions(questions);
       if (n) JAF.log('discovered options for', n, 'dropdown(s)');
@@ -194,6 +198,11 @@
 
       // Fields inside a repeated block (Work Experience 2) come from that profile entry only.
       const sv = JAF.sectionValue(q, profile);
+      if (q.meta?.manualFill) {
+        const suggestion = sv ? sv.value : matchRule(q, profile, resume)?.value;
+        results.push({ q, source: 'manual', value: suggestion || '', note: q.meta.manualFill });
+        continue;
+      }
       if (sv && sv.skip) { results.push({ q, source: 'skip', value: '', note: sv.note }); continue; }
       if (sv) {
         const res = await JAF.fill(q, sv.value, resume);
@@ -262,7 +271,7 @@
 
     const counts = results.reduce((c, r) => ((c[r.source] = (c[r.source] || 0) + 1), c), {});
     JAF.overlay.render(results, reapply);
-    JAF.overlay.status(`Filled ${(counts.profile || 0) + (counts.memory || 0) + (counts.ai || 0)} of ${questions.length}. profile ${counts.profile || 0} · memory ${counts.memory || 0} · ai ${counts.ai || 0} · skipped ${counts.skip || 0} · failed ${counts.fail || 0}`);
+    JAF.overlay.status(`Filled ${(counts.profile || 0) + (counts.memory || 0) + (counts.ai || 0)} of ${questions.length}. profile ${counts.profile || 0} · memory ${counts.memory || 0} · ai ${counts.ai || 0} · skipped ${counts.skip || 0} · manual ${counts.manual || 0} · failed ${counts.fail || 0}`);
     return { questions, results };
   }
 

@@ -199,7 +199,6 @@
 
   // ---- dropdowns -----------------------------------------------------------
   const OPTION_SEL = '[role="option"], [role="menuitem"], [role="menuitemradio"], [role="listbox"] li, [role="listbox"] > div, [data-automation-id="promptOption"], [data-automation-id="menuItem"], [data-automation-id="promptLeafNode"]';
-  const TYPEAHEAD_SEL = '[data-automation-id*="search" i], [data-automation-id*="select" i], [data-uxi-widget-type*="select" i], [data-automation-id*="prompt" i], [class*="typeahead" i], [class*="autocomplete" i], [class*="react-select" i]';
   const PLACEHOLDER_RE = /^(select|choose|please select|no options|no results|no items|no matches|nothing found|loading|searching|search|type to search|start typing|partial list|show (all|more)|view all|see all|more results|all$|--+|-)/i;
 
   function inOverlay(el) {
@@ -209,6 +208,13 @@
   function isTypable(el) {
     return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.getAttribute('role') === 'textbox';
   }
+
+  const MANUAL_TYPEAHEAD = 'Searchable dropdown autofill is temporarily disabled. Please search and select the value manually on the form.';
+
+  JAF.manualFillReason = function (q) {
+    const entry = JAF.registry.get(q.id);
+    return q.type === 'combobox' && entry?.el && isTypable(entry.el) ? MANUAL_TYPEAHEAD : '';
+  };
 
   // Option elements currently visible for this control: its aria-controls/aria-owns
   // listbox first, otherwise any visible option on the page (popups render in portals).
@@ -267,6 +273,7 @@
     let found = 0;
     for (const q of questions) {
       if (q.type !== 'combobox' || (q.options && q.options.length) || q.currentValue) continue;
+      if (JAF.manualFillReason(q)) continue;
       const entry = JAF.registry.get(q.id);
       if (!entry || entry.kind !== 'single' || !entry.el.isConnected) continue;
       const el = entry.el;
@@ -292,158 +299,28 @@
     return found;
   };
 
-  function displayedText(el) {
-    const own = isTypable(el) ? el.value : JAF.text(el);
-    const box = el.closest('[role="combobox"], [class*="select" i], [class*="control" i], [class*="combobox" i], [class*="dropdown" i]');
-    const around = box ? JAF.text(box.parentElement || box) : JAF.text(el.parentElement);
-    return `${own || ''} ${around || ''}`;
-  }
-
-  // Wait until the popup shows real options (typeaheads load them from the server after a debounce).
-  async function waitForOptions(el, ms = 1800, exclude = null) {
-    const opts = await JAF.waitFor(() => {
-      const o = toOptions(visibleOptionEls(el).filter((x) => !exclude || !exclude.has(x)));
-      return o.length ? o : null;
-    }, ms, 150);
-    return opts || [];
-  }
-
-  // Enter is safe to send when it cannot submit a form: no <form> ancestor, or the input is a widget.
-  function enterIsSafe(el) {
-    return !el.form || el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-autocomplete') || !!el.closest(TYPEAHEAD_SEL);
-  }
-
-  // Type a query and return the suggestions it produced. Sites like Workday only run the search
-  // when Enter is pressed, so when typing alone shows nothing we press Enter and wait for the
-  // server round trip. `exclude` holds option nodes that were visible before, so a stale list
-  // from the previous query never counts as a result for this one.
-  async function searchOptions(el, query, exclude) {
-    typeInto(el, query);
-    let opts = await waitForOptions(el, 700, exclude);
-    if (!opts.length && enterIsSafe(el)) {
-      key(el, 'Enter', 'Enter', 13);
-      opts = await waitForOptions(el, 3500, exclude);
-    }
-    return opts;
-  }
-
-  // The site's top result for a query, if it plausibly relates to it (shares a 3-letter token prefix).
-  function closestResult(query, opts) {
-    if (!opts.length) return null;
-    const norm = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    const toks = norm(query).split(' ').filter((t) => t.length >= 2);
-    const first = opts[0];
-    const l = norm(first.label);
-    return toks.some((t) => l.includes(t.slice(0, 3))) ? first : null;
-  }
-
-  async function pickVisible(el, target, wait = 0) {
-    const opts = wait ? await waitForOptions(el, wait) : toOptions(visibleOptionEls(el));
-    const pick = JAF.bestOption(target, opts);
-    if (!pick) return null;
-    click(pick.el);
-    await JAF.sleep(200);
-    return pick;
-  }
-
-  // The element that shows selected chips for a multi-value typeahead (skills).
-  function chipBox(el) {
-    return el.closest('[data-automation-id*="multiselect" i], [aria-multiselectable="true"], [class*="multi" i][class*="select" i]') || (el.parentElement && el.parentElement.parentElement) || el.parentElement;
-  }
-
-  // Skills-style field: type each value, pick the suggestion, repeat. Reports what stuck.
-  async function fillMulti(entry, el, values) {
-    const box = chipBox(el);
-    const added = [];
-    const missing = [];
-    for (const raw of values) {
-      const v = String(raw).trim();
-      if (!v) continue;
-      if (box && !el.value && JAF.text(box).toLowerCase().includes(v.toLowerCase())) { added.push(v); continue; } // already a chip
-      el.focus();
-      const stale = new Set(visibleOptionEls(el));
-      let opts = await searchOptions(el, v, stale);
-      let pick = JAF.bestOption(v, opts);
-      if (!pick && v.includes(' ')) {
-        const first = v.split(/[\s(,/]+/)[0];
-        const stale2 = new Set(visibleOptionEls(el));
-        const more = await searchOptions(el, first, stale2);
-        pick = JAF.bestOption(v, more);
-        if (!opts.length) opts = more;
-      }
-      let approx = false;
-      if (!pick) { pick = closestResult(v, opts); approx = !!pick; }
-      if (pick) {
-        click(pick.el);
-        await JAF.sleep(300);
-        added.push(approx && !JAF.fuzzyEq(pick.label, v) ? `${pick.label} (closest to "${v}")` : pick.label);
-      } else if (box && JAF.text(box).toLowerCase().includes(v.toLowerCase()) && !el.value) {
-        added.push(v); // the site accepted the free value on Enter
-      } else {
-        missing.push(v);
-      }
-      if (el.value) typeInto(el, '');
-      if (el.disabled || !el.isConnected) break;
-    }
-    el.blur();
-    fire(el, ['blur', 'focusout']);
-    if (!added.length) return { ok: false, note: `no suggestions matched ${missing.map((m) => `"${m}"`).join(', ')}; add them manually` };
-    const note = `added ${added.join(', ')}` + (missing.length ? `; not found: ${missing.join(', ')}` : '');
-    return { ok: true, note };
-  }
-
-  // Select `value` in any dropdown-like control: react-select style inputs, Workday
-  // buttons, ARIA comboboxes, plain typeahead inputs.
-  async function fillDropdown(entry, el, value, q) {
-    const typable = isTypable(el);
-    const multi = !!(q && q.meta && q.meta.multi);
-    const values = Array.isArray(value) ? value : multi ? String(value).split(/\s*[,;|\n]\s*/).filter(Boolean) : [String(value)];
-    if (typable && (values.length > 1 || (multi && values.length === 1))) return await fillMulti(entry, el, values);
-    value = values[0] ?? '';
-    const known = entry.options && entry.options.length ? (JAF.bestOption(value, entry.options) || JAF.rangeOption(value, entry.options)) : null;
-    const target = known ? known.label : String(value);
-
+  // Search inputs require site-specific selection verification. Keep button
+  // dropdowns working, but leave searchable controls entirely to the user.
+  async function fillDropdown(entry, el, value) {
+    if (isTypable(el)) return { ok: false, manual: true, note: MANUAL_TYPEAHEAD };
+    value = Array.isArray(value) ? value[0] : value;
+    const known = entry.options?.length
+      ? JAF.bestOption(value, entry.options) || JAF.rangeOption(value, entry.options) : null;
+    const target = known ? known.label : String(value ?? '');
     openDropdown(el);
     await JAF.sleep(300);
-    let pick = await pickVisible(el, target);
-
-    if (!pick && typable) {
-      // Type to filter (also triggers async option loading, or a search on Enter), then look again.
-      const stale = new Set(visibleOptionEls(el));
-      let opts = await searchOptions(el, target, stale);
-      pick = JAF.bestOption(target, opts);
-      if (!pick) {
-        const shorter = target.split(/[\s(,/]+/)[0];
-        if (shorter && shorter.length >= 2 && shorter !== target) {
-          const more = await searchOptions(el, shorter, new Set(visibleOptionEls(el)));
-          pick = JAF.bestOption(target, more);
-          if (!opts.length) opts = more;
-        }
-      }
-      if (!pick) pick = closestResult(target, opts);
-      if (pick) { click(pick.el); await JAF.sleep(200); }
-    }
-
+    const pick = JAF.bestOption(target, toOptions(visibleOptionEls(el)));
     if (pick) {
-      const shown = displayedText(el);
-      const verified = JAF.fuzzyEq(shown, pick.label) || shown.toLowerCase().includes(pick.label.toLowerCase().slice(0, 12));
-      if (!typable || verified) { el.blur(); return { ok: true, note: `picked "${pick.label}"` }; }
-      return { ok: true, note: `picked "${pick.label}" (could not confirm the field shows it, please verify)` };
-    }
-
-    if (typable) {
-      // Last resort for typeahead fields: keep the typed text and accept the first suggestion.
-      if (!el.value) typeInto(el, target);
-      key(el, 'ArrowDown', 'ArrowDown', 40);
-      await JAF.sleep(100);
-      key(el, 'Enter', 'Enter', 13);
-      await JAF.sleep(150);
-      const shown = displayedText(el);
-      if (JAF.fuzzyEq(shown, target)) return { ok: true, note: `typed "${target}"` };
-      return { ok: false, note: `typed "${target}" but no dropdown option matched; pick it manually` };
+      click(pick.el);
+      await JAF.sleep(200);
     }
     await closeDropdown(el, new Set());
-    return { ok: false, note: `no option matched "${target}"` };
+    el.blur();
+    const shown = JAF.text(el);
+    if (pick && JAF.fuzzyEq(shown, pick.label)) {
+      return { ok: true, note: `picked "${pick.label}"` };
+    }
+    return { ok: false, note: `Could not confirm a selection for "${target}"; please select it manually.` };
   }
 
   async function fillGFormsListbox(entry, value) {

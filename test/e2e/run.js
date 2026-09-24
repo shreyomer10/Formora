@@ -100,7 +100,7 @@ function serve() {
     expect('resume attached', got.cv === 'asha-resume.pdf');
     expect('experience select 1-3', got.exp === '1-3');
     expect('hidden-input styled radio: degree B.Tech', got.degree === 'btech');
-    expect('popup-only combobox: country India', got.country === 'India');
+    expect('searchable country left for manual selection', got.country === '' && got.labels.some((l) => /Country.*Fill manually/.test(l)));
     expect('combobox menu closed afterwards', !got.countryMenuOpen);
     expect('memory answer reused', got.proj === 'I built a payments reconciliation service.');
     expect('honeypot untouched', got.honeypot === '');
@@ -234,9 +234,17 @@ function serve() {
     await new Promise((r) => setTimeout(r, 3500));
     const dismissed = await page.evaluate(() => document.querySelector('#applypilot-root .ap-change').hidden);
     expect('wd step2: dismissing "Page changed" keeps it dismissed', dismissed);
+    await page.evaluate(() => {
+      window.typeaheadEvents = 0;
+      for (const input of document.querySelectorAll('.search input')) {
+        for (const name of ['focus', 'input', 'keydown', 'change']) {
+          input.addEventListener(name, () => window.typeaheadEvents++);
+        }
+      }
+    });
     // The header button still fills the new step.
     await page.click('#applypilot-root [data-act="fill"]');
-    // Typeaheads are searched one value at a time (type, Enter, wait for results), so poll for completion.
+    // Wait for section preparation and filling to finish.
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       const st = await page.evaluate(() => (document.querySelector('#applypilot-root .ap-status') || {}).textContent || '');
@@ -257,6 +265,8 @@ function serve() {
         e0: { school: val(e0, 'school'), degree: val(e0, 'degree'), field: val(e0, 'field') },
         c0: { name: val(c0, 'name'), number: val(c0, 'number'), dates: dates(c0) },
         chips: Array.from(document.querySelectorAll('.chip')).map((c) => c.textContent),
+        typeaheadEvents: window.typeaheadEvents,
+        manualCards: Array.from(document.querySelectorAll('#applypilot-root .ap-item')).filter((i) => /Fill manually/.test(i.textContent)).map((i) => ({ text: i.textContent, apply: !!i.querySelector('[data-act="apply"]'), locate: !!i.querySelector('[data-act="locate"]') })),
         cv: document.getElementById('cvname').textContent,
         certFile: document.querySelector('[data-entry="cert"] input[type=file]').files.length,
         status: (document.querySelector('#applypilot-root .ap-status') || {}).textContent || '',
@@ -274,13 +284,36 @@ function serve() {
     expect('wd: work 2 from entry 2 with To = 06/2022', w2.w1.title === 'Software Intern' && w2.w1.company === 'Beta Labs' && w2.w1.current === false && w2.w1.dates[1] === '06/2022');
     expect('wd: education school', w2.e0.school === 'IIIT Naya Raipur');
     expect('wd: degree "B.Tech" -> "Bachelor of Technology" in popup dropdown', w2.e0.degree === 'Bachelor of Technology');
-    expect('wd: field of study picked from typeahead', w2.e0.field === 'Data Science and Artificial Intelligence');
+    expect('wd: field of study left for manual selection', w2.e0.field === '');
     expect('wd: certification name + number + issued date 03/15/2024', w2.c0.name === 'AWS Certified Developer' && w2.c0.number === 'AWS-123' && w2.c0.dates[0] === '03/15/2024');
-    expect('wd: skills typed one by one and picked (Haskell not offered)', w2.chips.length === 3 && w2.chips.some((c) => /Python/.test(c)) && w2.chips.includes('Docker') && w2.chips.includes('Kotlin'));
+    expect('wd: searchable skills left untouched', w2.chips.length === 0);
+    expect('wd: no discovery, typing or Enter events on searchable controls', w2.typeaheadEvents === 0);
+    expect('wd: two manual cards with suggestions and Locate, without Apply', w2.manualCards.length === 2 && w2.manualCards.every((c) => !c.apply && c.locate) && w2.manualCards.some((c) => c.text.includes('Data Science and Artificial Intelligence')) && w2.manualCards.some((c) => c.text.includes('Python, Docker, Kotlin, Haskell')));
+    expect('wd: manual fields excluded from filled count', /manual 2/.test(w2.status));
     expect('wd: resume attached through the drop zone', w2.cv === 'Uploaded: asha-resume.pdf');
     expect('wd: certification attachment left alone', w2.certFile === 0);
     expect('wd: panel shows step 2', /step 2/.test(w2.step));
     console.log('status:', w2.status);
+
+    // Direct calls must also refuse searches, even with existing query text,
+    // visible options, and a multi-value answer. A click alone is not success.
+    const controls = await browser.newPage();
+    await controls.setContent('<label>Skills<input id="search" role="combobox" value="existing query" aria-controls="choices"></label><div id="choices" role="listbox"><div role="option">Python</div></div><button id="degree" role="combobox" aria-controls="choices">Select One</button>');
+    for (const script of ['util.js', 'filler.js']) await controls.addScriptTag({ path: path.join(EXT, 'src/content', script) });
+    const guards = await controls.evaluate(async () => {
+      const input = document.getElementById('search');
+      let events = 0;
+      for (const name of ['focus', 'input', 'keydown', 'change']) input.addEventListener(name, () => events++);
+      JAF.registry = new Map([['search', { kind: 'single', el: input, options: [] }], ['degree', { kind: 'single', el: document.getElementById('degree'), options: [] }]]);
+      const q = { id: 'search', type: 'combobox', options: [], meta: { multi: true } };
+      await JAF.discoverOptions([q]);
+      const result = await JAF.fill(q, ['Python', 'Docker']);
+      const button = await JAF.fill({ id: 'degree', type: 'combobox' }, 'Python');
+      return { result, button, events, value: input.value, discovered: q.options.length };
+    });
+    expect('direct fill: searchable controls cannot bypass manual fallback', !guards.result.ok && guards.result.manual && guards.events === 0 && guards.value === 'existing query' && guards.discovered === 0);
+    expect('button dropdown: ignored selection is not counted as filled', !guards.button.ok);
+    await controls.close();
   } catch (e) {
     exitCode = 1;
     console.error('ERROR', e);
