@@ -454,12 +454,12 @@
   // most likely the job description (the longest non-form text region).
   JAF.pageContext = function () {
     let jd = '';
-    const candidates = Array.from(document.querySelectorAll('main, article, [class*="description" i], [id*="description" i], [class*="job" i], section'));
+    const candidates = Array.from(document.querySelectorAll('[itemprop="description"], [class*="job-description" i], [id*="job-description" i]'));
     for (const c of candidates) {
       const t = JAF.labelText(c, 6000);
       if (t.length > jd.length) jd = t;
     }
-    if (jd.length < 400) jd = JAF.labelText(document.body, 6000);
-    return { title: document.title, url: location.href, jobDescription: jd.slice(0, 6000) };
+
+    return { title: document.title.slice(0, 200), url: FormoraSecurity.safeUrl(location.href), jobDescription: jd.slice(0, 4000) };
   };
 })();

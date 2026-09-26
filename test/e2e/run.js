@@ -41,7 +41,7 @@ function serve() {
     const opt = await browser.newPage();
     await opt.goto(`chrome-extension://${extId}/src/options/options.html`);
     await opt.evaluate((profile, resume) => chrome.storage.local.set({ profile, resume, settings: { model: 'gemini-3.8-flash' }, memory: {
-      'describe project proud': { label: 'Describe a project you are proud of.', type: 'textarea', answer: 'I built a payments reconciliation service.', ts: Date.now() },
+      'http://localhost:8765|describe project proud': { approved: true, origin: 'http://localhost:8765', label: 'Describe a project you are proud of.', type: 'textarea', answer: 'I built a payments reconciliation service.', ts: Date.now() },
     } }), profile, resume);
 
     const page = await browser.newPage();
@@ -53,7 +53,7 @@ function serve() {
     const resp = await opt.evaluate(async () => {
       const tabs = await chrome.tabs.query({});
       const tab = tabs.find((t) => (t.url || t.pendingUrl || '').includes('localhost')) || tabs[tabs.length - 1];
-      return await chrome.tabs.sendMessage(tab.id, { type: 'FILL_PAGE' });
+      return await chrome.runtime.sendMessage({ type: 'RUN_TAB', tabId: tab.id, mode: 'fill' });
     });
     console.log('fill response', resp);
     await new Promise((r) => setTimeout(r, 1500));
@@ -112,29 +112,26 @@ function serve() {
     expect('Apply all button shown for editable answers', got.applyAll);
     expect('resize grip present', got.resizeGrip);
 
+    await page.click('#applypilot-root [data-filter="attention"]');
+    const filtered = await page.$$eval('#applypilot-root .ap-item:not([hidden])', (items) => items.length > 0 && items.every((i) => ['manual', 'fail', 'skipped'].includes(i.dataset.state)));
+    await page.click('#applypilot-root [data-filter="review"]');
+    const emptyReview = await page.$eval('#applypilot-root .ap-filter-empty', (e) => !e.hidden);
+    await page.click('#applypilot-root [data-filter="all"]');
     const reviewUi = await page.evaluate(() => {
       const root = document.getElementById('applypilot-root');
-      root.querySelector('[data-filter="attention"]').click();
-      const attention = [...root.querySelectorAll('.ap-item:not([hidden])')];
-      const filtered = attention.length > 0 && attention.every((i) => ['manual', 'fail', 'skipped'].includes(i.dataset.state));
-      root.querySelector('[data-filter="review"]').click();
-      const emptyReview = !root.querySelector('.ap-filter-empty').hidden;
-      root.querySelector('[data-filter="all"]').click();
-      return { filtered, emptyReview, bannerHidden: getComputedStyle(root.querySelector('.ap-change')).display === 'none', technicalBadges: [...root.querySelectorAll('.ap-badge')].some((b) => /^(combobox|textarea|text|profile|memory|ai)$/.test(b.textContent.trim())) };
+      return { bannerHidden: getComputedStyle(root.querySelector('.ap-change')).display === 'none', technicalBadges: [...root.querySelectorAll('.ap-badge')].some((b) => /^(combobox|textarea|text|profile|memory|ai)$/.test(b.textContent.trim())) };
     });
-    expect('review panel: action filter and empty review state work', reviewUi.filtered && reviewUi.emptyReview);
+    expect('review panel: action filter and empty review state work', filtered && emptyReview);
     expect('review panel: hidden banner takes no space; no technical badges', reviewUi.bannerHidden && !reviewUi.technicalBadges);
 
-    // Apply all: edit one skipped answer in the panel, apply everything, check it landed.
-    const applied = await page.evaluate(async () => {
-      const item = Array.from(document.querySelectorAll('#applypilot-root .ap-item')).find((i) => /Why do you want/.test(i.textContent));
+    await page.evaluate(() => {
+      const item = [...document.querySelectorAll('#applypilot-root .ap-item')].find((i) => /Why do you want/.test(i.textContent));
       item.querySelector('textarea').value = 'Because payments are hard.';
-      document.querySelector('#applypilot-root [data-act="apply-all"]').click();
-      await new Promise((r) => setTimeout(r, 1500));
-      return { why: document.getElementById('why').value, note: document.querySelector('#applypilot-root .ap-tools-note').textContent };
     });
-    console.log('apply all', applied);
-    expect('Apply all wrote the edited answer into the form', applied.why === 'Because payments are hard.' && /Applied \d+/.test(applied.note));
+    await page.click('#applypilot-root [data-act="apply-all"]');
+    await page.waitForFunction(() => /Applied \d+/.test(document.querySelector('#applypilot-root .ap-tools-note').textContent));
+    const applied = await page.$eval('#why', (e) => e.value);
+    expect('Apply all wrote the edited answer into the form', applied === 'Because payments are hard.');
 
     // Same page, one field re-mounted by the framework (Workday does this on blur): the list must stay.
     const rerender = await page.evaluate(async () => {
@@ -168,7 +165,7 @@ function serve() {
     await opt.evaluate(async () => {
       const tabs = await chrome.tabs.query({});
       const tab = tabs.find((t) => (t.url || t.pendingUrl || '').includes('localhost')) || tabs[tabs.length - 1];
-      return await chrome.tabs.sendMessage(tab.id, { type: 'FILL_PAGE' });
+      return await chrome.runtime.sendMessage({ type: 'RUN_TAB', tabId: tab.id, mode: 'fill' });
     });
     await new Promise((r) => setTimeout(r, 2000));
     const g = await page.evaluate(() => ({
@@ -202,7 +199,7 @@ function serve() {
     const fillActive = () => opt.evaluate(async () => {
       const tabs = await chrome.tabs.query({});
       const tab = tabs.find((t) => (t.url || t.pendingUrl || '').includes('localhost')) || tabs[tabs.length - 1];
-      return await chrome.tabs.sendMessage(tab.id, { type: 'FILL_PAGE' });
+      return await chrome.runtime.sendMessage({ type: 'RUN_TAB', tabId: tab.id, mode: 'fill' });
     });
     await fillActive();
     await new Promise((r) => setTimeout(r, 1500));
@@ -328,6 +325,7 @@ function serve() {
     expect('button dropdown: ignored selection is not counted as filled', !guards.button.ok);
     await controls.evaluate(() => {
       window.styleRequests = [];
+      JAF.worker = (msg) => chrome.runtime.sendMessage(msg);
       window.chrome = { storage: { local: { get: async () => ({ settings: {} }) }, onChanged: { addListener: () => {} } }, runtime: { getURL: () => '', sendMessage: async (msg) => { window.styleRequests.push(msg.type); return { ok: true }; } } };
     });
     // Reproduce an existing tab retaining the previous release's stylesheet.
@@ -338,12 +336,19 @@ function serve() {
       JAF.overlay.show('Ready.');
       return window.styleRequests.join(',');
     });
-    expect('existing tab: stale styles trigger a refresh', requestedStyles === 'REFRESH_OVERLAY_STYLES');
+    expect('existing tab: stale styles trigger a refresh', requestedStyles.includes('REFRESH_OVERLAY_STYLES'));
     await controls.addStyleTag({ path: path.join(EXT, 'src/content/overlay.css') });
     await controls.addStyleTag({ content: oldStyles }); // old injection must not override the updated UI
     // The button transitions from the browser default to the refreshed theme.
     await controls.waitForFunction(() => getComputedStyle(document.querySelector('#applypilot-root .ap-actions [data-act="fill"]')).backgroundColor === 'rgb(28, 58, 75)');
-    const transitions = await controls.evaluate(async () => {
+    // Review editors now live in the trusted browser panel for AI drafts.
+    const panelTest = await browser.newPage();
+    await panelTest.setContent('<!doctype html><body></body>');
+    await panelTest.addScriptTag({ path: path.join(EXT, 'src/content/util.js') });
+    await panelTest.evaluate(() => { JAF.isSidePanel = true; window.chrome = { runtime: { getURL: () => '' } }; });
+    await panelTest.addStyleTag({ path: path.join(EXT, 'src/content/overlay.css') });
+    await panelTest.addScriptTag({ path: path.join(EXT, 'src/content/overlay.js') });
+    const transitions = await panelTest.evaluate(async () => {
       const results = [
         { q: { id: 'search', label: 'Graduation year', type: 'combobox', meta: { manualFill: 'manual' }, options: [] }, source: 'manual', value: '2027' },
         { q: { id: 'degree', label: 'Describe your work', type: 'textarea', options: [] }, source: 'ai', value: 'My draft answer.' },
@@ -376,6 +381,7 @@ function serve() {
       return { styling, onlyReview, dirty, failed, success };
     });
     expect('review panel: review filter, unsaved edits, failed apply and successful retry', Object.values(transitions).every(Boolean));
+    await panelTest.close();
     await controls.close();
   } catch (e) {
     exitCode = 1;

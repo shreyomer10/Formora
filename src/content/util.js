@@ -2,6 +2,9 @@
 (function () {
   const JAF = (window.JAF = window.JAF || {});
 
+  JAF.documentToken = JAF.documentToken || crypto.randomUUID();
+  JAF.worker = (message) => chrome.runtime.sendMessage({ ...message, documentToken: JAF.documentToken });
+
   JAF.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   JAF.text = (el) => (el ? (el.innerText || el.textContent || '') : '').replace(/\s+/g, ' ').trim();

@@ -26,6 +26,7 @@ async function run(assets = false) {
     const out = path.join(EXT, 'store/assets');
     if (assets) { fs.mkdirSync(out, { recursive: true }); await options.evaluate(() => scrollTo(0, 0)); await options.screenshot({ path: path.join(out, '03-onboarding.png') }); }
     await options.type('#apiKey', 'fake-test-key');
+    await options.click('#aiConsent');
     await options.type('[data-k=firstName]', 'Asha');
     await options.type('[data-k=email]', 'asha@example.com');
     await options.select('#panelLayout', 'sidebar');
@@ -90,7 +91,7 @@ async function run(assets = false) {
     const originalWidth = await page.evaluate(() => innerWidth);
     const appTabId = await options.evaluate(async () => {
       const tabs = await chrome.tabs.query({}); const tab = tabs.find((t) => t.url?.startsWith('http://127.0.0.1')) || tabs.at(-1);
-      await chrome.tabs.sendMessage(tab.id, { type: 'FILL_PAGE' });
+      await chrome.runtime.sendMessage({ type: 'RUN_TAB', tabId: tab.id, mode: 'fill' });
       return tab.id;
     });
     assert.equal(await page.$('#applypilot-root'), null, 'native mode inserts no panel in the website');
@@ -153,7 +154,7 @@ async function run(assets = false) {
     // A scan of an empty page clears the previous results.
     await page.evaluate(() => document.querySelectorAll('body > *').forEach((e) => e.remove()));
     await options.evaluate(async (tabId) => {
-      await chrome.tabs.sendMessage(tabId, { type: 'SCAN_PAGE' });
+      await chrome.runtime.sendMessage({ type: 'RUN_TAB', tabId, mode: 'scan' });
     }, appTabId);
     await page.waitForFunction(() => !document.querySelector('#applypilot-root .ap-item'));
     if (assets) {

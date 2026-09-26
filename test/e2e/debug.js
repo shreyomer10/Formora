@@ -42,7 +42,7 @@ const fill = process.argv.includes('--fill');
     await opt.evaluate(async (type) => {
       const tabs = await chrome.tabs.query({});
       const tab = tabs.find((t) => (t.url || '').includes('localhost')) || tabs[tabs.length - 1];
-      return await chrome.tabs.sendMessage(tab.id, { type });
+      return await chrome.runtime.sendMessage({ type: 'RUN_TAB', tabId: tab.id, mode: type === 'SCAN_PAGE' ? 'scan' : 'fill' });
     }, fill ? 'FILL_PAGE' : 'SCAN_PAGE');
     await new Promise((r) => setTimeout(r, fill ? 12000 : 3000));
     const out = await page.evaluate(() => {

@@ -13,7 +13,13 @@ function disconnect() {
   pending.clear();
 }
 
-function request(action, data = {}) {
+async function request(action, data = {}) {
+  if (action === 'fill' || action === 'scan') {
+    const owner = binding, destination = tabId;
+    const response = await chrome.runtime.sendMessage({ type: 'AUTHORIZE_TAB', tabId: destination });
+    if (owner !== binding) return { ok: false, note: 'The active tab changed. Try again.' };
+    if (!response.ok) return { ok: false, note: response.error };
+  }
   if (!port) return Promise.resolve({ ok: false, note: 'Open an application page, then reload it if Formora cannot connect.' });
   const id = ++requestId;
   return new Promise((resolve) => {
@@ -29,6 +35,7 @@ JAF.run = async ({ mode }) => {
   const result = await request(mode);
   if (owner === binding && !result.ok) JAF.overlay.status(result.note);
 };
+JAF.cancelAI = () => chrome.runtime.sendMessage({ type: 'CANCEL_AI', tabId });
 JAF.markSeen = () => request('dismiss');
 JAF.registry = new Map();
 JAF.highlight = (q) => {

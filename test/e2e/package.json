@@ -2,12 +2,14 @@
   "name": "applypilot-e2e",
   "private": true,
   "scripts": {
-    "test": "node fallback.test.js && node run.js && node features.test.js",
+    "test": "node fallback.test.js && node security-unit.test.js && node run.js && node features.test.js && node security.test.js",
     "test:features": "node features.test.js",
     "assets": "node store-assets.js",
     "test:headful": "node run.js --headful",
     "test:fallback": "node fallback.test.js",
-    "debug": "node debug.js"
+    "debug": "node debug.js",
+    "test:security": "node security-unit.test.js && node security.test.js",
+    "test:package": "node package.test.js"
   },
   "devDependencies": {
     "puppeteer-core": "^25.11.0"

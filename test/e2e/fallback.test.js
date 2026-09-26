@@ -1,29 +1,6 @@
 // Unit test for the service worker's model fallback: runs service-worker.js in a sandbox with a
 // stubbed chrome.* and fetch. No network, no API key needed.  usage: node fallback.test.js
-const vm = require('vm');
-const fs = require('fs');
-const path = require('path');
-
-const src = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'background', 'service-worker.js'), 'utf8').replace("import '../lib/models.js';", fs.readFileSync(path.resolve(__dirname, '../../src/lib/models.js'), 'utf8'));
-
-function makeSandbox(fetchImpl, settings) {
-  const listeners = {};
-  const store = { settings, profile: { firstName: 'Asha' }, resume: null, stats: undefined };
-  const sandbox = {
-    console,
-    setTimeout: (fn) => setTimeout(fn, 0),
-    fetch: fetchImpl,
-    chrome: {
-      runtime: { onMessage: { addListener: (fn) => (listeners.message = fn) }, onInstalled: { addListener: (fn) => (listeners.install = fn) }, openOptionsPage: async () => { store.opened = (store.opened || 0) + 1; } },
-      commands: { onCommand: { addListener: () => {} } },
-      tabs: {}, scripting: {},
-      storage: { local: { get: async (keys) => Object.fromEntries(keys.map((k) => [k, store[k]]).filter(([, v]) => v !== undefined)), set: async (patch) => Object.assign(store, patch) } },
-    },
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(src, sandbox);
-  return { send: (msg) => new Promise((resolve) => listeners.message(msg, {}, resolve)), store, install: (reason) => listeners.install({ reason }) };
-}
+const { makeSandbox } = require('./worker-harness');
 
 const okBody = (model) => ({ status: 'completed', model, output_text: JSON.stringify({ answers: [{ id: 'q1', value: 'hi', values: [], skip: false, note: '' }] }), usage: { total_input_tokens: 10, total_output_tokens: 5 } });
 const res = (status, body) => ({ ok: status < 400, status, text: async () => JSON.stringify(body), json: async () => body });

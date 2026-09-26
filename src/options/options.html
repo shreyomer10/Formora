@@ -9,6 +9,8 @@
     h2 { font-size: 16px; margin: 28px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px 16px; }
     label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #444; }
+    label.consent { flex-direction: row; align-items: flex-start; gap: 8px; }
+    .consent input { flex: none; margin: 2px 0 0; }
     input, select, textarea { padding: 7px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; font-family: inherit; }
     textarea { min-height: 90px; resize: vertical; }
     .full { grid-column: 1 / -1; }
@@ -61,6 +63,9 @@
   <p class="muted">The browser side panel sits beside the page without covering it. After saving, click the Formora toolbar icon to open it. The browser controls its side and width.</p>
 
   <h2>1. Gemini API</h2>
+  <p>AI features send your resume and relevant professional details to Google. Use a project suitable for personal data; Google's unpaid-service terms restrict personal and sensitive information. <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noreferrer">Google's terms</a></p>
+  <label class="consent"><input id="aiConsent" type="checkbox" /> I understand this sharing and have configured a suitable Google project. Enable AI extraction and drafts.</label>
+  <p class="muted">AI drafts must be approved in the browser side panel. Consent and sensitive declarations stay manual. Resume files: maximum 4 MB.</p>
   <div class="grid">
     <label class="full">API key <input id="apiKey" type="password" placeholder="AIza..." autocomplete="off" /></label>
     <label>Primary model
@@ -157,6 +162,7 @@
   <div class="row"><button id="clearMemory">Clear all memory</button><span id="stats" class="muted"></span></div>
 
   <div class="bar row"><button id="save" class="primary">Save everything</button><span id="saveMsg" class="msg"></span></div>
+  <script src="../lib/security.js"></script>
   <script src="../lib/models.js"></script>
   <script src="options.js"></script>
 </body>

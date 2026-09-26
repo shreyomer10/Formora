@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Formora - one-click job application autofill",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Fill job applications from your profile and resume. Review every answer in a sidebar or dialog. You stay in control of submitting.",
   "icons": {
     "16": "icons/icon16.png",
@@ -47,12 +47,14 @@
   "content_scripts": [
     {
       "matches": [
-        "http://*/*",
-        "https://*/*"
+        "https://*/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
       ],
-      "all_frames": true,
+      "all_frames": false,
       "run_at": "document_idle",
       "js": [
+        "src/lib/security.js",
         "src/lib/rules.js",
         "src/content/util.js",
         "src/content/extractor.js",
@@ -77,5 +79,9 @@
         "https://*/*"
       ]
     }
-  ]
+  ],
+  "minimum_chrome_version": "116",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://generativelanguage.googleapis.com; base-uri 'none'; frame-ancestors 'none'"
+  }
 }

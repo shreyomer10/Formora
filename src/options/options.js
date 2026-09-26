@@ -151,6 +151,7 @@ async function load() {
   savedSettings = settings;
   setupComplete = !!onboarding.completed;
   hasResume = !!resume;
+  $('aiConsent').checked = settings.aiConsent === true;
   $('apiKey').value = settings.apiKey || '';
   const primary = /^gemini-/i.test(settings.model || '') ? settings.model : FormoraModels.primary;
   const fallbacks = FormoraModels.parse(settings.fallbackModels).filter((id) => id !== primary);
@@ -199,6 +200,7 @@ async function save(completeSetup = false) {
   const settings = {
     ...savedSettings,
     apiKey: $('apiKey').value.trim(),
+    aiConsent: $('aiConsent').checked,
     model: $('model').value.trim() || 'gemini-3.8-flash',
     fallbackModels: selectedFallbacks(),
     panelLayout: $('panelLayout').value,
@@ -228,14 +230,17 @@ $('save').onclick = () => save(true).catch((e) => { $('saveMsg').textContent = e
 $('resumeFile').onchange = async () => {
   const f = $('resumeFile').files[0];
   if (!f) return;
-  const base64 = await fileToBase64(f);
-  const mimeType = f.type || (f.name.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
-  await chrome.storage.local.set({ resume: { fileName: f.name, mimeType, base64, text: '' } });
-  hasResume = true;
-  $('resumeText').value = '';
-  $('resumeInfo').textContent = `Stored: ${f.name} (${Math.round(f.size / 1024)} KB), no text yet`;
-  $('resumeMsg').textContent = 'Resume stored. Now click extract (PDF) or paste the text.';
-  updateSetup();
+  try {
+    if (f.size > FormoraSecurity.maxResumeBytes) throw new Error('Choose a resume of 4 MB or less. Your previous resume is unchanged.');
+    const base64 = await fileToBase64(f);
+    const mimeType = f.type || (f.name.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+    await chrome.storage.local.set({ resume: { fileName: f.name, mimeType, base64, text: '' } });
+    hasResume = true;
+    $('resumeText').value = '';
+    $('resumeInfo').textContent = `Stored: ${f.name} (${Math.round(f.size / 1024)} KB), no text yet`;
+    $('resumeMsg').textContent = 'Resume stored. Now click extract (PDF) or paste the text.';
+    updateSetup();
+  } catch (e) { $('resumeMsg').textContent = 'Could not store resume: ' + e.message; }
 };
 
 $('extract').onclick = async () => {

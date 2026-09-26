@@ -1,5 +1,5 @@
 const status = document.getElementById('status');
-const FILES = ['src/lib/rules.js', 'src/content/util.js', 'src/content/extractor.js', 'src/content/sections.js', 'src/content/gforms.js', 'src/content/filler.js', 'src/content/overlay.js', 'src/content/main.js'];
+const FILES = ['src/lib/security.js', 'src/lib/rules.js', 'src/content/util.js', 'src/content/extractor.js', 'src/content/sections.js', 'src/content/gforms.js', 'src/content/filler.js', 'src/content/overlay.js', 'src/content/main.js'];
 let popupTab = null, panelLayout = 'dialog';
 document.getElementById('fill').disabled = true;
 document.getElementById('scan').disabled = true;
@@ -18,24 +18,25 @@ async function send(type) {
   }
   status.textContent = 'Working...';
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !tab.id || !/^https?:|^file:/.test(tab.url || '')) { status.textContent = 'Open a job application page first.'; return; }
+  if (!tab || !tab.id || !/^https?:/.test(tab.url || '')) { status.textContent = 'Open an HTTPS application page or local test page first.'; return; }
   try {
     // Existing tabs can still have the stylesheet from before an extension reload.
-    await chrome.scripting.insertCSS({ target: { tabId: tab.id, allFrames: true }, files: ['src/content/overlay.css'] });
+    await chrome.scripting.insertCSS({ target: { tabId: tab.id, frameIds: [0] }, files: ['src/content/overlay.css'] });
   } catch (e) {
     status.textContent = 'Could not style the panel: ' + e.message;
     return;
   }
   try {
-    await chrome.tabs.sendMessage(tab.id, { type });
-  } catch {
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: FILES });
-      await chrome.tabs.sendMessage(tab.id, { type });
-    } catch (e) {
-      status.textContent = 'Could not reach the page: ' + e.message;
-      return;
+      await chrome.tabs.sendMessage(tab.id, { type: 'AUTHORIZATION_INFO' }, { frameId: 0 });
+    } catch {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: FILES });
     }
+    const response = await chrome.runtime.sendMessage({ type: 'RUN_TAB', tabId: tab.id, mode: type === 'SCAN_PAGE' ? 'scan' : 'fill' });
+    if (!response.ok) throw new Error(response.error);
+  } catch (e) {
+    status.textContent = 'Could not fill the page: ' + e.message;
+    return;
   }
   status.textContent = 'Running. See the panel on the page.';
   setTimeout(() => window.close(), 800);

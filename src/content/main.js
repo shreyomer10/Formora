@@ -1,13 +1,15 @@
 // Orchestrator: prepare repeatable sections -> extract -> deterministic fill -> memory ->
 // one LLM call -> apply -> review panel. Then watch for the next step of the application.
 (function () {
+  if (window !== window.top) return;
   const JAF = window.JAF;
+  const SEC = FormoraSecurity;
+  JAF.cancelAI = () => JAF.worker({ type: 'CANCEL_AI' });
   if (JAF.__mainLoaded) return;
   JAF.__mainLoaded = true;
 
   const JOB_SPECIFIC = /\b(why|this (role|position|company|job|opportunity)|our (company|team)|about us|cover letter|motivat|interest(ed)? in)\b/i;
   const NOT_RESUME = /\b(cover letter|photo|picture|transcript|certificate|certification|portfolio|id proof|passport|attachment)\b/i;
-  const ACTIVE_KEY = 'applypilot.active';
   const isTop = window === window.top;
 
   function haystack(q) {
@@ -73,19 +75,17 @@
   }
 
   async function loadState() {
-    const s = await chrome.storage.local.get(['profile', 'resume', 'settings', 'memory']);
-    // The content script only needs to know whether a key exists; the key itself stays in the service worker.
-    const { apiKey, ...settings } = s.settings || {};
-    settings.hasApiKey = !!apiKey;
-    return { profile: s.profile || {}, resume: s.resume || null, settings, memory: s.memory || {} };
+    const response = await JAF.worker({ type: 'GET_FILL_STATE' });
+    if (!response?.ok) throw new Error(response?.error || 'Open Formora from the toolbar to authorize this page.');
+    return response.state;
   }
 
-  async function saveMemory(memory, q, value, url) {
-    const key = JAF.normalizeLabel(q.label);
-    if (!key || q.type === 'file' || q.meta?.entry) return;
-    memory[key] = { label: q.label, type: q.type, answer: value, url, ts: Date.now() };
-    await chrome.storage.local.set({ memory });
+  async function saveMemory(memory, q, value) {
+    if (SEC.manualQuestion(q) || q.type === 'file' || q.meta?.entry || JOB_SPECIFIC.test(q.label)) return;
+    const response = await JAF.worker({ type: 'SAVE_ANSWER', key: JAF.normalizeLabel(q.label), question: { label: q.label, type: q.type }, value });
+    if (!response.ok) throw new Error(response.error);
   }
+  const memoryKey = (q) => `${SEC.safeUrl(location.href)}|${JAF.normalizeLabel(q.label)}`;
 
   // ---- multi-step watcher ------------------------------------------------------
   let watchTimer = null;
@@ -93,9 +93,6 @@
   let lastSeen = null;
   let stableTicks = 0;
   let steps = 0;
-
-  function setActive(on) { try { if (on) sessionStorage.setItem(ACTIVE_KEY, '1'); else sessionStorage.removeItem(ACTIVE_KEY); } catch { /* blocked */ } }
-  function isActive() { try { return sessionStorage.getItem(ACTIVE_KEY) === '1'; } catch { return false; } }
 
   // Accept the page as it is now. With `forget`, the previous step's extracted fields are dropped too,
   // so a dismissed "page changed" is not re-announced on the next tick.
@@ -106,7 +103,6 @@
 
   JAF.startWatch = function () {
     if (!isTop) return;
-    setActive(true);
     JAF.markSeen();
     if (watchTimer) return;
     watchTimer = setInterval(() => {
@@ -142,7 +138,6 @@
   JAF.stopWatch = function () {
     if (watchTimer) clearInterval(watchTimer);
     watchTimer = null;
-    setActive(false);
   };
 
   // ---- run ---------------------------------------------------------------------
@@ -184,7 +179,7 @@
     }
     JAF.log('extracted', questions.length, questions.map((q) => `${q.label} [${q.type}${q.meta?.entry ? ' ' + q.meta.entry.kind + q.meta.entry.index : ''}]`).join(' | '));
     for (const q of questions) {
-      const reason = JAF.manualFillReason(q);
+      const reason = SEC.manualQuestion(q) ? 'Choose consent, eligibility and sensitive declarations yourself.' : JAF.manualFillReason(q);
       if (reason) q.meta = { ...q.meta, manualFill: reason };
     }
     if (questions.some((q) => q.type === 'combobox' && !q.options.length && !q.currentValue && !q.meta?.manualFill)) {
@@ -207,7 +202,7 @@
       // Fields inside a repeated block (Work Experience 2) come from that profile entry only.
       const sv = JAF.sectionValue(q, profile);
       if (q.meta?.manualFill) {
-        const suggestion = sv ? sv.value : matchRule(q, profile, resume)?.value;
+        const suggestion = SEC.manualQuestion(q) ? '' : sv ? sv.value : matchRule(q, profile, resume)?.value;
         results.push({ q, source: 'manual', value: suggestion || '', note: q.meta.manualFill });
         continue;
       }
@@ -227,7 +222,7 @@
         if (res.ok) JAF.highlight(q, '#16a34a');
         continue;
       }
-      const mem = memory[JAF.normalizeLabel(q.label)];
+      const mem = memory[memoryKey(q)];
       if (mem && !q.meta?.entry && mem.type === q.type && !JOB_SPECIFIC.test(q.label) && (!q.options.length || JAF.bestOption(Array.isArray(mem.answer) ? mem.answer[0] : mem.answer, q.options.map((o) => ({ label: o, value: o }))))) {
         const res = await JAF.fill(q, mem.answer, resume);
         results.push({ q, source: res.ok ? 'memory' : 'fail', value: mem.answer, note: res.note || 'reused a previous answer' });
@@ -239,15 +234,15 @@
     }
 
     if (pending.length) {
-      if (!settings.hasApiKey) {
-        pending.forEach((q) => results.push({ q, source: 'skip', value: '', note: 'no API key set in options' }));
+      if (!settings.hasApiKey || !settings.aiConsent) {
+        pending.forEach((q) => results.push({ q, source: 'skip', value: '', note: settings.hasApiKey ? 'Enable AI data sharing in Settings to draft this answer.' : 'no API key set in options' }));
       } else {
         // Show what is already filled right away; the model's questions get placeholders until it answers.
         JAF.overlay.render(results.concat(pending.map((q) => ({ q, source: 'pending', value: '', note: '' }))), reapply);
         JAF.overlay.busy(`Preparing ${pending.length} ${pending.length === 1 ? 'answer' : 'answers'} from your profile and resume…`);
-        const hints = pending.map((q) => memory[JAF.normalizeLabel(q.label)]).filter(Boolean).slice(0, 20)
+        const hints = pending.map((q) => memory[memoryKey(q)]).filter(Boolean).slice(0, 20)
           .map((m) => ({ question: m.label, previousAnswer: m.answer }));
-        const resp = await chrome.runtime.sendMessage({
+        const resp = await JAF.worker({
           type: 'LLM_FILL',
           payload: {
             questions: pending.map((q) => ({
@@ -265,13 +260,12 @@
           const byId = new Map((resp.answers || []).map((a) => [a.id, a]));
           for (const q of pending) {
             const a = byId.get(q.id);
-            if (!a || a.skip) { results.push({ q, source: 'skip', value: '', note: (a && a.note) || 'model had no grounded answer' }); continue; }
+            if (!a || a.skip) { results.push({ q, source: 'skip', value: '', note: 'No grounded draft available. Enter this answer yourself.' }); continue; }
             const value = q.type === 'checkbox' ? (a.values && a.values.length ? a.values : [a.value]).filter(Boolean) : a.value;
-            if (q.type === 'checkbox' && !value.length) { results.push({ q, source: 'skip', value: '', note: a.note || 'left unticked' }); continue; }
-            if (!q.type.match(/checkbox/) && !String(value || '').trim()) { results.push({ q, source: 'skip', value: '', note: a.note || 'model returned nothing' }); continue; }
-            const res = await JAF.fill(q, value, resume);
-            results.push({ q, source: res.ok ? 'ai' : 'fail', value, note: res.note || a.note || '' });
-            if (res.ok) { JAF.highlight(q, '#1C3A4B'); await saveMemory(memory, q, value, location.href); }
+            if (q.type === 'checkbox' && !value.length) { results.push({ q, source: 'skip', value: '', note: 'left unticked' }); continue; }
+            if (!q.type.match(/checkbox/) && !String(value || '').trim()) { results.push({ q, source: 'skip', value: '', note: 'model returned nothing' }); continue; }
+            // Keep drafts in the isolated world. Only the browser-owned panel sees their values.
+            results.push({ q, source: 'ai', value, note: 'Draft only. Review in the browser side panel before applying.' });
           }
         }
       }
@@ -282,14 +276,20 @@
     return { questions, results };
   }
 
-  async function reapply(q, value) {
+  async function reapply(q, value, reviewed = false) {
+    if (SEC.manualQuestion(q)) return { ok: false, note: 'Choose this declaration directly on the form.' };
+    const entry = JAF.registry.get(q.id);
+    if (!(entry?.el || entry?.els?.[0])?.isConnected) return { ok: false, note: 'This field changed. Preview the page again.' };
     const { resume, memory } = await loadState();
     const res = await JAF.fill(q, value, resume);
-    if (res.ok) { JAF.highlight(q, '#1C3A4B'); await saveMemory(memory, q, value, location.href); }
+    if (res.ok) { JAF.highlight(q, '#1C3A4B'); if (reviewed) await saveMemory(memory, q, value); }
     return res;
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (_sender.id !== chrome.runtime.id || !_sender.url?.startsWith(chrome.runtime.getURL(''))) return;
+    if (msg?.type === 'AUTHORIZATION_INFO') { sendResponse({ url: location.href, documentToken: JAF.documentToken }); return; }
+    if (msg?.type === 'UI_SETTINGS') { JAF.setLayout?.(msg.panelLayout); return; }
     if (msg && (msg.type === 'FILL_PAGE' || msg.type === 'SCAN_PAGE')) {
       JAF.run({ mode: msg.type === 'SCAN_PAGE' ? 'scan' : 'fill' })
         .then((r) => sendResponse({ ok: true, count: r.questions.length }))
@@ -298,53 +298,6 @@
     }
   });
 
-  // ---- Google Drive picker frame (Google Forms file upload) ----------------------
-  // The form's "Add file" button opens the Drive picker in a cross-origin iframe. This same
-  // content script runs inside that frame; the top frame asks it to drop the stored resume
-  // into the picker's upload input.
-  if (!isTop && /docs\.google\.com$/.test(location.hostname) && /picker/.test(location.pathname)) {
-    window.addEventListener('message', async (e) => {
-      const msg = e.data;
-      if (!msg || msg.type !== 'applypilot-attach') return;
-      const reply = (r) => { try { e.source.postMessage({ type: 'applypilot-attach-result', ...r }, '*'); } catch { /* frame gone */ } };
-      try {
-        const { resume } = await chrome.storage.local.get(['resume']);
-        if (!resume || !resume.base64) return reply({ ok: false, note: 'no resume stored' });
-        // Switch to the Upload tab when the picker opened on another one.
-        const tab = Array.from(document.querySelectorAll('[role="tab"], [role="button"], button, div'))
-          .find((el) => /^upload$/i.test(JAF.text(el)) && JAF.isVisible(el) && el.getBoundingClientRect().width < 200);
-        if (tab) { tab.click(); await JAF.sleep(400); }
-        const input = await JAF.waitFor(() => JAF.deepQueryAll('input[type="file"]').find((i) => !i.disabled), 5000, 150);
-        if (!input) return reply({ ok: false, note: 'no upload input in the picker' });
-        const bin = atob(resume.base64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        const dt = new DataTransfer();
-        dt.items.add(new File([bytes], resume.fileName || 'resume.pdf', { type: resume.mimeType || 'application/pdf' }));
-        input.files = dt.files;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-        reply({ ok: true, note: `handed ${resume.fileName} to the Drive picker` });
-      } catch (err) {
-        reply({ ok: false, note: err.message });
-      }
-    });
-  }
-
-  // Tell the service worker which toolbar icon set fits the browser's colour scheme.
-  if (isTop) {
-    try {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      const report = () => { chrome.runtime.sendMessage({ type: 'COLOR_SCHEME', dark: mq.matches }).catch(() => {}); chrome.storage.local.set({ ui: { dark: mq.matches } }); };
-      report();
-      mq.addEventListener('change', report);
-    } catch { /* no matchMedia */ }
-  }
-
-  // After a full page load inside an application the user already started, come back up
-  // in a compact state so the next step is one click away.
-  if (isTop && isActive()) {
-    const boot = async () => { await JAF.overlayReady; JAF.overlay.ready(); JAF.startWatch(); };
-    if (document.readyState === 'complete') setTimeout(boot, 300); else window.addEventListener('load', () => setTimeout(boot, 300), { once: true });
-  }
+  // Authorization is never restored from website-controlled storage. A full navigation
+  // requires a new explicit toolbar/side-panel action; SPA step detection stays local.
 })();

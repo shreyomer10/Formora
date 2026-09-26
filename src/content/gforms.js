@@ -113,28 +113,8 @@
   };
 
   // Google Forms uploads go to the respondent's Drive through a picker iframe. Open it, ask our
-  // content script inside the picker to feed it the resume, then watch the form for the file name.
-  JAF.gformsAttach = async function (entry, resume) {
-    if (!resume || !resume.base64) return { ok: false, note: 'no resume stored in options' };
-    const item = entry.el;
-    const already = () => JAF.text(item).includes((resume.fileName || '').slice(0, 20));
-    if (already()) return { ok: true, note: `${resume.fileName} already attached` };
-    entry.button.click();
-    const frame = await JAF.waitFor(() => Array.from(document.querySelectorAll('iframe')).find((f) => /picker/.test(f.src) && JAF.isVisible(f)), 6000, 200);
-    if (!frame) return { ok: false, note: 'the Drive picker did not open; click "Add file" and attach manually' };
-    await JAF.sleep(1200); // let the picker boot
-    const result = await new Promise((resolve) => {
-      const onMsg = (e) => { if (e.data && e.data.type === 'applypilot-attach-result') { window.removeEventListener('message', onMsg); resolve(e.data); } };
-      window.addEventListener('message', onMsg);
-      let tries = 0;
-      const ping = () => { try { frame.contentWindow.postMessage({ type: 'applypilot-attach' }, '*'); } catch { /* not ready */ } if (++tries < 8) setTimeout(ping, 1000); };
-      ping();
-      setTimeout(() => { window.removeEventListener('message', onMsg); resolve(null); }, 9000);
-    });
-    if (!result) return { ok: false, note: 'no answer from the Drive picker (are you signed in to Google?); attach manually' };
-    if (!result.ok) return { ok: false, note: `${result.note}; attach manually` };
-    const shown = await JAF.waitFor(already, 20000, 500);
-    if (shown) return { ok: true, note: `attached ${resume.fileName} via Drive` };
-    return { ok: false, note: `${result.note}, but the form does not show it yet; check the picker` };
+  // The page-message upload bridge is intentionally removed.
+  JAF.gformsAttach = async function () {
+    return { ok: false, note: 'Attach your resume manually using Google Forms Add file. Automatic Drive-picker uploads are disabled.' };
   };
 })();

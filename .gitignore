@@ -4,4 +4,4 @@ node_modules/
 Thumbs.db
 *.zip
 test/e2e/node_modules/
-test/e2e/package-lock.json
+dist/

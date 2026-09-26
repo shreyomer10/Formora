@@ -19,10 +19,8 @@
   let styleRefresh = null;
   let layout = 'dialog';
   let rootElement = null;
-  JAF.overlayReady = nativePanel ? Promise.resolve() : chrome.storage.local.get(['settings']).then(({ settings = {} }) => setLayout(settings.panelLayout));
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (!nativePanel && area === 'local' && changes.settings) setLayout(changes.settings.newValue?.panelLayout);
-  });
+  JAF.overlayReady = nativePanel ? Promise.resolve() : JAF.worker({ type: 'GET_UI_SETTINGS' }).then(({ settings = {} }) => setLayout(settings.panelLayout));
+  JAF.setLayout = setLayout;
   function setLayout(value) {
     const previous = layout;
     layout = value === 'sidebar' ? 'sidebar' : 'dialog';
@@ -48,10 +46,14 @@
   function load(key) { try { const v = sessionStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } }
 
   function root() {
-    let r = rootElement || document.getElementById('applypilot-root');
+    let r = rootElement;
     if (!r) {
       r = document.createElement('div');
       r.id = 'applypilot-root';
+      // Page scripts can dispatch events against shared DOM but cannot create trusted clicks.
+      if (!nativePanel) r.addEventListener('click', (event) => {
+        if (!event.isTrusted) { event.preventDefault(); event.stopImmediatePropagation(); }
+      }, true);
       // In browser-panel mode the content script keeps only a detached view model.
       // Nothing is inserted into the application's DOM or changes its layout.
       if (nativePanel || layout !== 'sidebar') document.documentElement.appendChild(r);
@@ -195,7 +197,7 @@
 
   function userNote(r, state) {
     if (state === 'manual') return r.value ? 'Choose this answer in the form. Use the suggested value below.' : 'This field needs a selection in the form.';
-    if (state === 'review') return 'Based on your profile and resume. Check the details before submitting.';
+    if (state === 'review') return 'Draft only. Check this answer, then Apply to share it with the website.';
     if (state === 'filled') return /\bcheck\b|verify|could not|does not|not found/i.test(r.note || '') ? r.note : '';
     if (state === 'existing') return '';
     if (state === 'blank') return r.note === 'current position: end date left empty' ? 'No end date needed for your current role.' : 'Left unselected based on your profile.';
@@ -217,7 +219,7 @@
               <button data-act="min" title="Collapse" aria-label="Collapse panel">&#8211;</button>
               <button data-act="close" title="Close" aria-label="Close panel">&#10005;</button>
             </div>
-            <div class="ap-actions"><button class="ap-primary" data-act="fill" title="Fill this page using your saved information">Fill page <span aria-hidden="true">↗</span></button><button data-act="scan" title="Preview the questions without filling them">Preview fields</button></div>
+            <div class="ap-actions"><button class="ap-primary" data-act="fill" title="Fill this page using your saved information">Fill page <span aria-hidden="true">↗</span></button><button data-act="scan" title="Preview the questions without filling them">Preview fields</button><button data-act="cancel" hidden>Cancel AI</button></div>
             <div class="ap-status" role="status" aria-live="polite"><span class="ap-spin" hidden></span><div class="ap-status-text"></div></div>
             <div class="ap-progress" role="progressbar" aria-label="Fields filled" aria-valuemin="0" hidden><span></span></div>
             <div class="ap-change" hidden></div>
@@ -230,6 +232,7 @@
         r.querySelector('[data-act="close"]').onclick = () => { JAF.overlay.hide(); if (JAF.stopWatch) JAF.stopWatch(); };
         r.querySelector('[data-act="fill"]').onclick = () => JAF.run({ mode: 'fill' });
         r.querySelector('[data-act="scan"]').onclick = () => JAF.run({ mode: 'scan' });
+        r.querySelector('[data-act="cancel"]').onclick = () => JAF.cancelAI?.();
         r.querySelector('[data-act="settings"]').onclick = async () => {
           try { const response = await chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' }); if (!response.ok) throw new Error(response.error); }
           catch (e) { this.status('Could not open Settings: ' + e.message); }
@@ -242,15 +245,16 @@
         size(r, load(SIZE_KEY));
         if (!nativePanel && load(MIN_KEY)) this.minimize(true);
       }
-      if (status != null) { r.querySelector('.ap-status-text').textContent = status; r.querySelector('.ap-spin').hidden = true; r.querySelector('.ap-progress').hidden = true; }
+      if (status != null) { r.querySelector('.ap-status-text').textContent = status; r.querySelector('.ap-spin').hidden = true; r.querySelector('.ap-progress').hidden = true; r.querySelector('[data-act="cancel"]').hidden = true; }
     },
     status(text) { this.show(text); },
     summary(results = currentResults) {
       const fields = results.filter((r) => r.q);
-      const filled = fields.filter((r) => ['profile', 'memory', 'ai'].includes(r.source)).length;
+      const filled = fields.filter((r) => ['profile', 'memory'].includes(r.source)).length;
       const attention = fields.filter(needsYou).length;
       this.show();
       root().querySelector('.ap-spin').hidden = true;
+      root().querySelector('[data-act="cancel"]').hidden = true;
       root().querySelector('.ap-status-text').innerHTML = `<strong>Filled ${filled} of ${fields.length} fields</strong>\n<div class="ap-status-detail">${attention ? `${attention} ${attention === 1 ? 'field still needs' : 'fields still need'} your input.` : 'Review your answers, then submit on the form.'}</div>`;
       const progress = root().querySelector('.ap-progress');
       progress.hidden = !fields.length;
@@ -259,7 +263,7 @@
       progress.firstElementChild.style.width = `${fields.length ? filled / fields.length * 100 : 0}%`;
     },
     // Status with a spinner: extraction, dropdown discovery, the model call.
-    busy(text) { this.show(text); root().querySelector('.ap-spin').hidden = false; },
+    busy(text) { this.show(text); root().querySelector('.ap-spin').hidden = false; root().querySelector('[data-act="cancel"]').hidden = false; },
     hide() { answerSizer?.disconnect(); answerSizer = null; rootElement?.remove(); rootElement = null; currentResults = []; resultVersion++; },
     isVisible() { return !!rootElement?.querySelector('.ap-panel'); },
     minimize(on) {
@@ -342,6 +346,12 @@
       const editors = []; // for Apply all
       for (const r of results) {
         const item = document.createElement('div');
+        if (!nativePanel && r.source === 'ai') {
+          item.className = 'ap-item ap-ai'; item.dataset.state = 'review';
+          item.innerHTML = `<div class="ap-label">${esc(r.q.label)}</div><div class="ap-note">An AI draft is ready. Review it in the browser side panel before sharing it with this website.</div><button data-act="review-draft">Review AI draft</button>`;
+          item.querySelector('button').onclick = () => JAF.worker({ type: 'OPEN_REVIEW' }).then((r) => { if (!r.ok) this.status(r.error); }).catch((e) => this.status(e.message));
+          list.appendChild(item); continue;
+        }
         if (r.source === 'info') {
           item.className = 'ap-item ap-info';
           item.innerHTML = `<div class="ap-note">${esc(r.note)}</div>`;
@@ -526,7 +536,7 @@
     }
     JAF.publishPanel = publish;
     chrome.runtime.onConnect.addListener((port) => {
-      if (port.name !== 'formora-panel' || port.sender?.id !== chrome.runtime.id) return;
+      if (port.name !== 'formora-panel' || port.sender?.id !== chrome.runtime.id || port.sender?.url !== chrome.runtime.getURL('src/sidepanel/sidepanel.html')) return;
       ports.add(port);
       port.onDisconnect.addListener(() => ports.delete(port));
       JAF.overlayReady.then(() => {
@@ -549,7 +559,7 @@
             if (!element?.isConnected) throw new Error('This field was replaced. Preview fields again.');
             if (msg.action === 'apply') {
               if (!reapplyHandler || entry.source === 'manual' || entry.q.meta?.manualFill || entry.q.type === 'file') throw new Error('Fill this field directly in the form.');
-              result = await reapplyHandler(entry.q, msg.value);
+              result = await reapplyHandler(entry.q, msg.value, true);
               entry.value = msg.value; entry.source = result.ok ? 'memory' : 'fail'; entry.note = result.note || '';
               JAF.overlay.summary();
             } else if (msg.action === 'locate') {
