@@ -37,6 +37,10 @@ JAF.run = async ({ mode }) => {
 };
 JAF.cancelAI = () => chrome.runtime.sendMessage({ type: 'CANCEL_AI', tabId });
 JAF.markSeen = () => request('dismiss');
+JAF.openEmbedded = () => {
+  const owner = binding;
+  return request('open-embedded').then((r) => { if (owner === binding && !r.ok) JAF.overlay.status(r.note); });
+};
 JAF.registry = new Map();
 JAF.highlight = (q) => {
   const owner = binding;
@@ -52,7 +56,8 @@ function render(next) {
         if (owner !== binding) return Promise.resolve({ ok: false, note: 'The active tab changed. Preview the fields again.' });
         return request('apply', { id: q.id, value, documentToken, version });
       });
-    } else JAF.overlay.empty('Click Fill page or Preview fields to read this application.');
+    } else if (next.embedded) JAF.overlay.embedded(next.embedded);
+    else JAF.overlay.empty('Click Fill page or Preview fields to read this application.');
   }
   if (next.change?.appeared) JAF.overlay.fieldsAppeared(next.change.appeared);
   else if (next.change) JAF.overlay.pageChanged(next.change);

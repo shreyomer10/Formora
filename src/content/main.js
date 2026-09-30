@@ -99,6 +99,27 @@
     return { value: best.value };
   }
 
+  // Cross-origin application iframes (Greenhouse, Lever, Ashby embeds) are separate documents
+  // the extension does not read. Offer to open the form itself instead.
+  const ATS_HOST = /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|icims\.com|jobvite\.com|bamboohr\.com|recruitee\.com|breezy\.hr|teamtailor\.com|personio\.|jazzhr\.com|applytojob\.com|successfactors\.|taleo\.net|oraclecloud\.com|dover\.com|rippling\.com)/i;
+  let embeddedForm = null;
+  function findEmbeddedForm() {
+    const frames = Array.from(document.querySelectorAll('iframe[src]')).map((f) => {
+      let url;
+      try { url = new URL(f.src, location.href); } catch { return null; }
+      if (!SEC.allowedPage(url.href) || url.origin === location.origin || !JAF.isVisible(f)) return null;
+      const box = f.getBoundingClientRect();
+      const hint = `${url.href} ${f.title || ''} ${f.name || ''} ${f.id || ''} ${f.className || ''}`;
+      const ats = ATS_HOST.test(url.hostname);
+      if (!ats && !(/\b(apply|application|job|career|candidate)/i.test(hint) && box.height >= 300)) return null;
+      return { url: url.href, host: url.hostname, score: (ats ? 1e7 : 0) + box.width * box.height };
+    }).filter(Boolean).sort((a, b) => b.score - a.score);
+    return frames[0] ? { url: frames[0].url, host: frames[0].host } : null;
+  }
+  JAF.openEmbedded = function () {
+    if (embeddedForm && SEC.allowedPage(embeddedForm.url)) location.assign(embeddedForm.url);
+  };
+
   async function loadState() {
     const response = await JAF.worker({ type: 'GET_FILL_STATE' });
     if (!response?.ok) throw new Error(response?.error || 'Open Formora from the toolbar to authorize this page.');
@@ -197,7 +218,9 @@
     const questions = JAF.isGForms() ? JAF.extractGForms() : JAF.extractGeneric();
     JAF.log('extracted field count', questions.length);
     if (!questions.length) {
-      if (isTop) JAF.overlay.status('No form fields found on this page.');
+      embeddedForm = JAF.isGForms() ? null : findEmbeddedForm();
+      if (embeddedForm) JAF.overlay.embedded(embeddedForm);
+      else if (isTop) JAF.overlay.status('No form fields found on this page.');
       return { questions: [] };
     }
     JAF.log('extracted', questions.length, questions.map((q) => `${q.label} [${q.type}${q.meta?.entry ? ' ' + q.meta.entry.kind + q.meta.entry.index : ''}]`).join(' | '));

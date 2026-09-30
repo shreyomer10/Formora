@@ -142,6 +142,7 @@
   let reapplyHandler = null;
   let resultVersion = 0;
   let changeInfo = null;
+  let embeddedInfo = null;
 
   function fitAnswer(textarea) {
     if (!textarea.offsetWidth) return;
@@ -278,6 +279,7 @@
     empty(text) {
       this.show();
       currentResults = [];
+      embeddedInfo = null;
       resultVersion++;
       const list = root().querySelector('.ap-list');
       list.innerHTML = `<div class="ap-empty">${esc(text || 'No questions extracted yet.')}</div>`;
@@ -322,6 +324,16 @@
       this.minimize(false);
     },
 
+    // The form lives in a cross-origin iframe: offer to open it as the page itself.
+    embedded(info) {
+      this.empty();
+      embeddedInfo = info;
+      this.status(`This form is embedded from ${info.host}.`);
+      const list = root().querySelector('.ap-list');
+      list.innerHTML = `<div class="ap-empty ap-embedded"><p>The application form is loaded from <strong>${esc(info.host)}</strong> inside this page. Browsers keep embedded forms separate, so Formora can’t read it here.</p><button class="ap-primary" data-act="open-embedded">Open the form in this tab <span aria-hidden="true">↗</span></button><p>Then click Fill page again.</p></div>`;
+      list.querySelector('[data-act="open-embedded"]').onclick = () => JAF.openEmbedded?.(info);
+    },
+
     tools(handler, note) {
       const t = root().querySelector('.ap-tools');
       applyAllHandler = handler;
@@ -335,6 +347,7 @@
       this.show();
       this.pageChanged(null);
       currentResults = results;
+      embeddedInfo = null;
       reapplyHandler = onReapply;
       resultVersion++;
       currentFilter = 'all';
@@ -511,8 +524,8 @@
         status: r?.querySelector('.ap-status-text')?.textContent || 'Ready. Click Fill page to start.',
         busy: r ? !r.querySelector('.ap-spin')?.hidden : false,
         summary: r ? !r.querySelector('.ap-progress')?.hidden : false,
-        step: r?.querySelector('.ap-step')?.textContent || '',
         change: r?.querySelector('.ap-change')?.hidden ? null : changeInfo,
+        embedded: embeddedInfo,
         results: currentResults.map(({ q, source, value, note }) => ({
           source, value, note,
           q: q ? { id: q.id, type: q.type, label: q.label, options: q.options, currentValue: q.currentValue,
@@ -529,7 +542,7 @@
         for (const port of ports) { try { port.postMessage({ type: 'STATE', state }); } catch { ports.delete(port); } }
       });
     }
-    for (const name of ['show', 'status', 'busy', 'summary', 'render', 'empty', 'ready', 'pageChanged', 'fieldsAppeared', 'setStep', 'hide']) {
+    for (const name of ['show', 'status', 'busy', 'summary', 'render', 'empty', 'ready', 'pageChanged', 'fieldsAppeared', 'embedded', 'hide']) {
       const original = JAF.overlay[name];
       JAF.overlay[name] = function (...args) { const result = original.apply(this, args); publish(); return result; };
     }
@@ -549,6 +562,10 @@
           let result = { ok: true };
           if (msg.action === 'fill' || msg.action === 'scan') await JAF.run({ mode: msg.action });
           else if (msg.action === 'dismiss') { changeInfo = null; JAF.overlay.pageChanged(null); JAF.markSeen?.(true); }
+          else if (msg.action === 'open-embedded') {
+            if (msg.documentToken !== documentToken || !embeddedInfo) throw new Error('Fill the page again to find its form.');
+            JAF.openEmbedded?.();
+          }
           else {
             if (msg.documentToken !== documentToken || msg.version !== resultVersion || JAF.running) throw new Error('The page changed. Preview fields again before applying an answer.');
             const entry = currentResults.find((r) => r.q?.id === msg.id);
