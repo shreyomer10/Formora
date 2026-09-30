@@ -15,7 +15,7 @@
   const SIZE_KEY = 'applypilot.size';
   const MIN_KEY = 'applypilot.min';
   const MIN_W = 300, MIN_H = 360;
-  const UI_VERSION = '2';
+  const UI_VERSION = '3';
   let styleRefresh = null;
   let layout = 'dialog';
   let rootElement = null;
@@ -147,7 +147,7 @@
   function fitAnswer(textarea) {
     if (!textarea.offsetWidth) return;
     textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(260, Math.max(88, textarea.scrollHeight + 2))}px`;
+    textarea.style.height = `${Math.min(240, Math.max(56, textarea.scrollHeight + 2))}px`;
   }
 
   function stateOf(r) {
@@ -231,7 +231,7 @@
             <div class="ap-filters" role="group" aria-label="Filter answers" hidden><button data-filter="all" aria-pressed="true">All <span>0</span></button><button data-filter="attention" aria-pressed="false">Needs you <span>0</span></button><button data-filter="review" aria-pressed="false">AI review <span>0</span></button></div>
             <div class="ap-tools" hidden><span class="ap-tools-note"></span><button data-act="apply-all">Apply all answers</button></div>
             <div class="ap-list"></div>
-            <div class="ap-foot"><span aria-hidden="true">✓</span> You’re in control. Only you can submit this application.</div>
+            <div class="ap-foot"><span aria-hidden="true">✓</span> Only you can submit this application.</div>
             <div class="ap-resize" title="Drag to resize"></div>
           </div>`;
         r.querySelector('[data-act="close"]').onclick = () => { JAF.overlay.hide(); if (JAF.stopWatch) JAF.stopWatch(); };
@@ -260,7 +260,7 @@
       this.show();
       root().querySelector('.ap-spin').hidden = true;
       root().querySelector('[data-act="cancel"]').hidden = true;
-      root().querySelector('.ap-status-text').innerHTML = `<strong>Filled ${filled} of ${fields.length} fields</strong>\n<div class="ap-status-detail">${attention ? `${attention} ${attention === 1 ? 'field still needs' : 'fields still need'} your input.` : 'Review your answers, then submit on the form.'}</div>`;
+      root().querySelector('.ap-status-text').innerHTML = `<strong>Filled ${filled} of ${fields.length} fields</strong> <span class="ap-status-detail">· ${attention ? `${attention} ${attention === 1 ? 'needs' : 'need'} you` : 'review, then submit'}</span>`;
       const progress = root().querySelector('.ap-progress');
       progress.hidden = !fields.length;
       progress.setAttribute('aria-valuenow', filled);
