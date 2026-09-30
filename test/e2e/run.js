@@ -13,6 +13,7 @@ const profile = {
   linkedin: 'https://linkedin.com/in/asha', noticePeriod: '30', expectedCtc: '14 LPA', totalExperienceYears: '2.5',
   city: 'Pune', country: 'India', skills: 'Node.js, Go, Kafka', degree: 'B.Tech',
   tenthPercentage: '92%', twelfthPercentage: '88%', cgpa: '8.9', rollNumber: 'CS2019-042',
+  customFields: [{ label: 'Kaggle profile', value: 'https://kaggle.com/asha' }, { label: 'Pronouns', value: 'she/her' }],
 };
 const resume = { fileName: 'asha-resume.pdf', mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.4 fake').toString('base64'), text: 'Asha Verma, backend engineer.' };
 
@@ -78,8 +79,9 @@ function serve() {
       why: document.getElementById('why').value,
       proj: document.getElementById('proj').value,
       ref: document.getElementById('ref').value,
+      kaggle: document.getElementById('kaggle').value, links: document.getElementById('links').value,
       p10: document.getElementById('p10').value, p12: document.getElementById('p12').value, gcg: document.getElementById('gcg').value, roll: document.getElementById('roll').value,
-      applyAll: !!document.querySelector('#applypilot-root .ap-tools:not([hidden]) [data-act="apply-all"]'),
+      applyAllIdle: !!document.querySelector('#applypilot-root .ap-tools:not([hidden]) [data-act="apply-all"]'),
       resizeGrip: !!document.querySelector('#applypilot-root .ap-resize'),
       honeypot: document.querySelector('.hp').value,
       panel: !!document.getElementById('applypilot-root'),
@@ -109,7 +111,9 @@ function serve() {
     expect('all 23 questions extracted', got.labels.length >= 23);
     expect('reference field left alone', got.ref === '');
     expect('10th / 12th / graduation CGPA / roll number from profile', got.p10 === '92%' && got.p12 === '88%' && got.gcg === '8.9' && got.roll === 'CS2019-042');
-    expect('Apply all button shown for editable answers', got.applyAll);
+    expect('Apply all bar hidden until an answer is edited', !got.applyAllIdle);
+    expect('custom field "Kaggle profile" fills "Kaggle Profile URL"', got.kaggle === 'https://kaggle.com/asha');
+    expect('"LinkedIn, Github or Portfolio" gets the LinkedIn URL', got.links === 'https://linkedin.com/in/asha');
     expect('resize grip present', got.resizeGrip);
 
     await page.click('#applypilot-root [data-filter="attention"]');

@@ -32,8 +32,8 @@ async function run(assets = false) {
     await options.select('#panelLayout', 'sidebar');
     // File selection must preserve the unsaved key/profile/layout.
     const file = await options.$('#resumeFile');
-    await file.uploadFile(path.join(EXT, 'test/e2e/fixtures/resume.pdf'));
-    await options.waitForFunction(() => document.getElementById('resumeInfo').textContent.includes('resume.pdf'));
+    await file.uploadFile(path.join(EXT, 'test/e2e/fixtures/resume-links.pdf'));
+    await options.waitForFunction(() => document.getElementById('resumeInfo').textContent.includes('resume-links.pdf'));
     assert.equal(await options.$eval('#apiKey', (e) => e.value), 'fake-test-key');
     assert.equal(await options.$eval('#panelLayout', (e) => e.value), 'sidebar');
     // Mock the API inside this temporary worker; no request leaves Chrome.
@@ -41,8 +41,10 @@ async function run(assets = false) {
     await worker.evaluate(() => {
       globalThis.fetch = async (_url, init) => {
         const request = JSON.parse(init.body);
+        if (Array.isArray(request.input)) globalThis.extractRequest = request;
+        // The PDF only shows the words "LinkedIn" and "GitHub"; the URLs are hyperlink targets.
         const data = Array.isArray(request.input)
-          ? { resumeText: 'Asha Verma, backend engineer.', profile: { firstName: 'Asha', lastName: 'Verma', email: 'asha@example.com', skills: 'Node.js, Go', workExperience: [], education: [], certifications: [] } }
+          ? { resumeText: 'Asha Verma, backend engineer. LinkedIn | GitHub', profile: { firstName: 'Asha', lastName: 'Verma', email: 'asha@example.com', skills: 'Node.js, Go', linkedin: 'LinkedIn', github: '', workExperience: [], education: [], certifications: [], customFields: [{ label: 'Languages spoken', value: 'English, Hindi' }] } }
           : { ok: true };
         return { ok: true, json: async () => ({ output_text: JSON.stringify(data) }) };
       };
@@ -50,8 +52,27 @@ async function run(assets = false) {
     await options.click('#extract');
     await options.waitForFunction(() => document.getElementById('resumeMsg').textContent.startsWith('Done.'));
     assert(await options.$eval('#onboarding', (e) => !e.hidden), 'extraction waits for explicit review/save');
+    const sentLinks = await worker.evaluate(() => extractRequest.input.map((part) => part.text || '').join('\n'));
+    assert(sentLinks.includes('https://www.linkedin.com/in/asha-synthetic') && sentLinks.includes('https://github.com/asha-synthetic'), 'PDF hyperlinks are sent with the extraction request');
+    assert.equal(await options.$eval('[data-k=linkedin]', (e) => e.value), 'https://www.linkedin.com/in/asha-synthetic');
+    assert.equal(await options.$eval('[data-k=github]', (e) => e.value), 'https://github.com/asha-synthetic');
+    assert.match(await options.$eval('#resumeText', (e) => e.value), /Links in resume:\nhttps:\/\/www\.linkedin\.com\/in\/asha-synthetic/);
+    assert.equal(await options.$eval('[data-k=leetcode]', (e) => e.value), 'https://leetcode.com/u/asha_synthetic/');
+    assert.equal(await options.$eval('[data-k=portfolio]', (e) => e.value), 'https://asha-synthetic.vercel.app/');
+    assert.deepEqual(await options.$$eval('#customList .entry', (rows) => rows.map((r) => [...r.querySelectorAll('[data-f]')].map((i) => i.value))), [['Codeforces profile', 'https://codeforces.com/profile/asha_synthetic'], ['CodeChef profile', 'https://www.codechef.com/users/asha_synthetic'], ['Languages spoken', 'English, Hindi']]);
+    // Answer-style suggestions cycle and stay editable; auto-apply defaults on.
+    await options.click('#suggestStyle');
+    const firstStyle = await options.$eval('#customInstructions', (e) => e.value);
+    await options.click('#suggestStyle');
+    const secondStyle = await options.$eval('#customInstructions', (e) => e.value);
+    assert(firstStyle && secondStyle && firstStyle !== secondStyle, 'suggestions rotate');
+    assert.match(await options.$eval('#suggestHint', (e) => e.textContent), /Suggestion 2 of 5/);
+    assert.equal(await options.$eval('#autoApply', (e) => e.checked), true);
     await options.click('#save');
     await options.waitForFunction(() => document.getElementById('onboarding').hidden);
+    const saved = await options.evaluate(async () => chrome.storage.local.get(['profile', 'settings']));
+    assert.deepEqual(saved.profile.customFields.map((f) => [f.label, f.value]), [['Codeforces profile', 'https://codeforces.com/profile/asha_synthetic'], ['CodeChef profile', 'https://www.codechef.com/users/asha_synthetic'], ['Languages spoken', 'English, Hindi']]);
+    assert.equal(saved.settings.autoApply, true);
     await options.reload(); await options.waitForSelector('#model option');
     assert(await options.$eval('#onboarding', (e) => e.hidden), 'onboarding completion persists');
     assert.equal(await options.$eval('#panelLayout', (e) => e.value), 'sidebar');
