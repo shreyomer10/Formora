@@ -109,7 +109,8 @@ const PROFILE_SCHEMA = {
       properties: {
         firstName: { type: 'string' }, lastName: { type: 'string' }, email: { type: 'string' }, phone: { type: 'string' },
         city: { type: 'string' }, state: { type: 'string' }, country: { type: 'string' },
-        linkedin: { type: 'string' }, github: { type: 'string' }, portfolio: { type: 'string' },
+        linkedin: { type: 'string', description: 'Full URL' }, github: { type: 'string', description: 'Full URL' }, portfolio: { type: 'string', description: 'Personal website URL' },
+        leetcode: { type: 'string', description: 'LeetCode / Codeforces / CodeChef / HackerRank profile URL' },
         currentCompany: { type: 'string' }, currentTitle: { type: 'string' }, totalExperienceYears: { type: 'string' },
         skills: { type: 'string', description: 'Comma separated' },
         college: { type: 'string' }, degree: { type: 'string' }, branch: { type: 'string' }, graduationYear: { type: 'string' }, cgpa: { type: 'string' },
@@ -317,17 +318,19 @@ async function llmFill(payload, signal) {
   return { answers: SEC.validateAnswers(parsed.answers, payload.questions), model, fallbackNote };
 }
 
-async function extractProfile({ base64, mimeType }, signal) {
+async function extractProfile({ base64, mimeType, links }, signal) {
   const { settings = {} } = await chrome.storage.local.get(['settings']);
   if (!settings.apiKey) throw new Error('No API key. Save it first.');
   if (!settings.aiConsent) throw new Error('Review Google data sharing in Settings before using AI.');
   if (typeof base64 !== 'string' || base64.length > Math.ceil(SEC.maxResumeBytes / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error('Resume must be a valid PDF of 4 MB or less.');
   if (mimeType !== 'application/pdf') throw new Error('AI extraction supports PDF resumes. Paste the resume text manually for other formats.');
+  links = Array.isArray(links) ? links.filter((l) => typeof l === 'string' && l.length <= 500 && /^(https?:\/\/|mailto:)\S+$/i.test(l)).slice(0, 50) : [];
   const body = {
     model: modelFor(settings),
     input: [
       { type: 'document', mime_type: 'application/pdf', data: base64 },
-      { type: 'text', text: 'Extract the full plain text of this resume and the candidate profile fields. Leave a field as an empty string if the resume does not state it. totalExperienceYears is a number as a string, e.g. "2.5" (estimate from work history; "0" for freshers). Fill workExperience (jobs and internships, most recent first), education and certifications as structured lists with dates as YYYY-MM where the resume gives a month, else YYYY. Set college/degree/branch/graduationYear/cgpa from the most recent education entry.' },
+      { type: 'text', text: 'Extract the full plain text of this resume and the candidate profile fields. Leave a field as an empty string if the resume does not state it. totalExperienceYears is a number as a string, e.g. "2.5" (estimate from work history; "0" for freshers). Fill workExperience (jobs and internships, most recent first), education and certifications as structured lists with dates as YYYY-MM where the resume gives a month, else YYYY. Set college/degree/branch/graduationYear/cgpa from the most recent education entry. Profile links must be full URLs; the visible text often only says "LinkedIn" or "GitHub", so take the URL from the embedded hyperlinks listed below when the text does not show it. Put any fact that has no field of its own in customFields.' },
+      ...(links.length ? [{ type: 'text', text: `Hyperlinks embedded in the PDF (link targets, not visible in the text):\n${links.join('\n')}` }] : []),
     ],
     generation_config: { thinking_level: 'medium', max_output_tokens: 16000 },
     response_format: jsonFormat(PROFILE_SCHEMA),

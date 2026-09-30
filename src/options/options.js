@@ -250,15 +250,25 @@ $('extract').onclick = async () => {
     const { resume } = await chrome.storage.local.get(['resume']);
     if (!resume) { $('resumeMsg').textContent = 'Choose a resume file first.'; return; }
     $('resumeMsg').textContent = 'Reading resume with Gemini...';
-    const resp = await chrome.runtime.sendMessage({ type: 'EXTRACT_PROFILE', payload: { base64: resume.base64, mimeType: resume.mimeType } });
+    let links = [];
+    try { if (resume.mimeType === 'application/pdf') links = await FormoraPdfLinks.extract(resume.base64); } catch { /* unreadable PDF structure: the model still reads the text */ }
+    const resp = await chrome.runtime.sendMessage({ type: 'EXTRACT_PROFILE', payload: { base64: resume.base64, mimeType: resume.mimeType, links } });
     if (!resp.ok) { $('resumeMsg').textContent = 'Failed: ' + resp.error; return; }
     const { resumeText, profile } = resp.data;
-    $('resumeText').value = resumeText;
+    // A hyperlink target beats whatever the model read off the page ("LinkedIn", "github.com/…" without a scheme).
+    const linked = FormoraPdfLinks.classify(links);
+    for (const [key, url] of Object.entries(linked.fields)) {
+      if (!/^https?:\/\//i.test(profile[key] || '')) profile[key] = url;
+    }
+    const web = links.filter((l) => /^https?:/i.test(l) && !resumeText.includes(l));
+    $('resumeText').value = web.length ? `${resumeText}\n\nLinks in resume:\n${web.join('\n')}` : resumeText;
     profileInputs().forEach((el) => {
       const v = profile[el.dataset.k];
-      if (v && !el.value) el.value = v;
+      // Link fields also replace a value that is not a URL (a name or handle typed earlier).
+      const replaceable = !el.value || (linked.fields[el.dataset.k] && !/^https?:\/\//i.test(el.value));
+      if (v && replaceable) el.value = v;
     });
-    Object.keys(LISTS).forEach((k) => {
+    Object.keys(LISTS).filter((k) => k !== 'customFields').forEach((k) => {
       // Only replace a list the user has not filled in by hand.
       if (Array.isArray(profile[k]) && profile[k].length && !readList(k).length) renderList(k, profile[k]);
     });
