@@ -9,6 +9,7 @@
   JAF.__mainLoaded = true;
 
   const JOB_SPECIFIC = /\b(why|this (role|position|company|job|opportunity)|our (company|team)|about us|cover letter|motivat|interest(ed)? in)\b/i;
+  const LINK_KEYS = ['linkedin', 'github', 'portfolio', 'leetcode'];
   const NOT_RESUME = /\b(cover letter|photo|picture|transcript|certificate|certification|portfolio|id proof|passport|attachment)\b/i;
   const isTop = window === window.top;
 
@@ -48,7 +49,12 @@
       return rule.test.test(h);
     });
     // A label that matches two unrelated rules ("name and phone") is a compound question: leave it to the LLM.
+    // "LinkedIn, GitHub or portfolio" asks for any one profile link: give the first one on file.
     const keys = new Set(hits.map((r) => r.key.replace(/^(first|last|middle|full)Name$/, 'name')));
+    if (keys.size > 1 && [...keys].every((k) => LINK_KEYS.includes(k))) {
+      const key = LINK_KEYS.find((k) => keys.has(k) && profile[k]);
+      return key ? { value: profile[key], key } : null;
+    }
     if (keys.size > 1) return null;
     const rule = hits[0];
     if (rule) {
