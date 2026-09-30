@@ -86,6 +86,24 @@ const LISTS = {
   },
 };
 
+// Starting points for the answer-style box; the button cycles through them.
+const STYLE_SUGGESTIONS = [
+  'Keep answers short and clear: 2-3 sentences, under 60 words. Use simple, everyday English.',
+  'Write in a warm, friendly first-person tone, like talking to a person. Contractions are fine; avoid stiff or formal phrasing.',
+  'Sound confident but modest. State what I did plainly, without exaggerating or using words like "passionate", "expert" or "rockstar".',
+  'Be professional and polished. Use complete sentences, no slang, and a respectful tone suited to formal companies.',
+  'Get to the point. Answer the question in the first sentence, then add one supporting example. No filler or repeated phrases.',
+];
+$('suggestStyle').onclick = () => {
+  const box = $('customInstructions');
+  const current = STYLE_SUGGESTIONS.indexOf(box.value.trim());
+  if (current < 0 && box.value.trim() && !confirm('Replace your current instructions with a suggestion?')) return;
+  const next = (current + 1) % STYLE_SUGGESTIONS.length;
+  box.value = STYLE_SUGGESTIONS[next];
+  $('suggestHint').textContent = `Suggestion ${next + 1} of ${STYLE_SUGGESTIONS.length}. Click again for another, or edit it. Save everything to keep it.`;
+  box.focus();
+};
+
 function renderList(key, items) {
   const def = LISTS[key];
   const box = $(def.el);

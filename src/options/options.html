@@ -39,6 +39,9 @@
     .fallback-row select { flex: 1; min-width: 0; }
     [hidden] { display: none !important; }
     #modelResults { white-space: pre-line; }
+    .label-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+    .label-row label { flex: 1; }
+    button.suggest { padding: 5px 12px; border-color: #bcd0db; background: #eef4f6; color: #1C3A4B; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -157,9 +160,12 @@
   <div class="row"><button data-add="certifications">Add certification</button></div>
 
   <h2>4. Answer style</h2>
-  <label>Custom instructions for generated answers (tone, length, things to emphasise or avoid)
-    <textarea id="customInstructions" placeholder="Keep answers under 80 words. Emphasise backend and system design experience. Never mention salary in free-text answers."></textarea>
-  </label>
+  <div class="label-row">
+    <label for="customInstructions">Custom instructions for generated answers (tone, length, things to emphasise or avoid)</label>
+    <button id="suggestStyle" class="suggest" type="button" title="Show another suggestion">✨ Formora suggestions</button>
+  </div>
+  <textarea id="customInstructions" style="width:100%;box-sizing:border-box" placeholder="Keep answers under 80 words. Emphasise backend and system design experience. Never mention salary in free-text answers."></textarea>
+  <p id="suggestHint" class="muted">Click Formora suggestions for a ready-made style. Click again for another; edit it freely.</p>
 
   <h2>5. Answer memory</h2>
   <p class="muted">Answers the model generated and you applied. Reused verbatim for identical non-job-specific questions, and shown to the model as hints otherwise.</p>
