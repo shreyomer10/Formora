@@ -5,3 +5,8 @@ Thumbs.db
 *.zip
 test/e2e/node_modules/
 dist/
+
+# Private working notes: branding, security audit, store listing and publishing material.
+BRAND.md
+SECURITY-AUDIT.md
+store/

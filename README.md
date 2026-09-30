@@ -48,11 +48,10 @@ Needs Chrome installed (set `CHROME_PATH` if it is not in the default location).
 
 - Multi-select dropdowns (Workday Skills and similar) are manual-only. The review panel shows the suggested values and **Fill manually**; use **Locate** to search and select on the form. Searchable single-choice dropdowns are filled only on a clear match; when the site's list lacks your value (a college missing from Greenhouse's list) the card says so.
 - API calls go from the extension's service worker straight to `generativelanguage.googleapis.com` (Interactions API, `store: false`); the key is never exposed to web pages.
-- Default model is `gemini-3.8-flash` at medium thinking level. Choose the primary model and up to two ordered fallbacks from dropdowns. Defaults are `gemini-3.5-flash-lite` and `gemini-3.1-pro-preview`. Settings preserves previously saved custom IDs and offers **Test selected models** to check each one independently. Transient failures retry; missing/retired models (404/410) move to the next selection and appear in panel notes. See `store/MODEL-RELEASE-CHECK.md` for release maintenance.
+- Default model is `gemini-3.8-flash` at medium thinking level. Choose the primary model and up to two ordered fallbacks from dropdowns. Defaults are `gemini-3.5-flash-lite` and `gemini-3.1-pro-preview`. Settings preserves previously saved custom IDs and offers **Test selected models** to check each one independently. Transient failures retry; missing/retired models (404/410) move to the next selection and appear in panel notes.
 - Professional profile fields and bounded resume text sit in the system instruction, so repeated applications share the same prefix and benefit from Gemini's implicit caching (cached tokens are shown in the stats line).
 - Google Forms Drive-picker uploads are manual. Use the form's **Add file** control. The unauthenticated cross-frame upload bridge has been removed; ordinary top-level resume inputs still autofill.
 - Profile fields for 10th and 12th percentage, graduation CGPA and college roll / enrollment number are filled by rules; the profile is also included as context when an AI request is needed, and the model is told to skip marks, IDs and dates it does not have rather than estimate them.
-- `BRAND.md` is a three-step prompt chain (name, then theme from the name, then logo from both) to run yourself; the current name and colours are placeholders.
 - Multi-step forms (Workday): the panel notices each new step and offers to fill it; nothing runs without a click.
 - Repeatable sections need entries in options section 3b. With none stored the section is left untouched and the panel says so.
 
@@ -82,8 +81,8 @@ test/e2e/debug.js                  fill one page and dump what was extracted
 
 - **Panel appearance** selects a floating dialog (default) or native browser side panel. In side-panel mode, the toolbar icon opens the browser panel and the application gets its own resized viewport. The browser controls which side and width to use. The gear opens Settings; the floating dialog also retains minimize and close controls. Dialog position/size remain remembered when switching layouts.
 - First installation opens a four-step setup guide. Resume upload preserves unsaved settings; extraction leaves the result for review and explicit saving.
-- Publisher/support: Shrey Omer, shreyomer10@gmail.com. Privacy policy: `privacy.html`. Store copy, screenshots and promotional assets: `store/`. The preliminary name check found other Formora software: see `store/NAME-CHECK.md` before publication.
-- `npm run test:features` covers setup, settings, the native browser side panel, active-tab routing, navigation, remote edits in Chrome using synthetic data and mocked AI. `npm run assets` regenerates store assets. These tests do not call live Gemini or establish model availability.
+- Publisher/support: Shrey Omer, shreyomer10@gmail.com. Privacy policy: `privacy.html`.
+- `npm run test:features` covers setup, settings, the native browser side panel, active-tab routing, navigation, remote edits in Chrome using synthetic data and mocked AI. `npm run assets` regenerates store screenshots locally. These tests do not call live Gemini or establish model availability.
 
 The native panel requires a Chromium browser implementing `chrome.sidePanel` (Chrome 116+ for programmatic opening). On a browser without that API, select Floating dialog. There is no page-docked sidebar fallback. Side-panel updates travel over a tab-scoped extension port and are not persisted to storage.
 
@@ -95,4 +94,3 @@ The native panel requires a Chromium browser implementing `chrome.sidePanel` (Ch
 - Resume uploads are limited to 4 MB. AI calls have 30-second per-attempt timeouts, response/request bounds, concurrency limits and a Cancel AI control. AI sharing is off until explicitly enabled, including after upgrading from 0.2.0.
 - A full security regression run is `cd test/e2e; npm.cmd test` on Windows. `npm.cmd run test:security` runs the focused tests; `npm.cmd run test:package` builds the release ZIP, verifies its links and reruns the browser security tests against the extracted ZIP.
 
-Release evidence and outstanding live-service checks: [security remediation](store/SECURITY-REMEDIATION.md). Account setup and sharing: [publishing guide](store/PUBLISHING.md).
