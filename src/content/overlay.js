@@ -176,6 +176,11 @@
   const needsYou = (r) => ['manual', 'fail', 'skipped', 'edited'].includes(stateOf(r));
   const isAI = (state) => state === 'review' || state === 'aiApplied';
   const inForm = (r) => ['profile', 'memory'].includes(r.source) || (r.source === 'ai' && r.applied);
+  const hasValue = (r) => (Array.isArray(r.value) ? r.value.length > 0 : String(r.value ?? '').trim() !== '');
+  // The card's value is what the form already shows: Apply stays hidden until the user edits it.
+  const showsInForm = (r) => inForm(r) || stateOf(r) === 'existing';
+  // An answer Formora has but could not put into the form (a failed write, or a draft awaiting approval).
+  const awaitingApply = (r) => hasValue(r) && !r.q?.meta?.manualFill && r.q?.type !== 'file' && (r.source === 'fail' || (r.source === 'ai' && !r.applied));
 
   function filterCards() {
     const r = root();
@@ -229,7 +234,7 @@
             <div class="ap-progress" role="progressbar" aria-label="Fields filled" aria-valuemin="0" hidden><span></span></div>
             <div class="ap-change" hidden></div>
             <div class="ap-filters" role="group" aria-label="Filter answers" hidden><button data-filter="all" aria-pressed="true">All <span>0</span></button><button data-filter="attention" aria-pressed="false">Needs you <span>0</span></button><button data-filter="review" aria-pressed="false">AI review <span>0</span></button></div>
-            <div class="ap-tools" hidden><span class="ap-tools-note"></span><button data-act="apply-all">Apply all answers</button></div>
+            <div class="ap-tools" hidden><span class="ap-tools-note"></span><button class="ap-primary" data-act="apply-all">Apply all answers</button></div>
             <div class="ap-list"></div>
             <div class="ap-foot"><span aria-hidden="true">✓</span> Only you can submit this application.</div>
             <div class="ap-resize" title="Drag to resize"></div>
@@ -414,7 +419,7 @@
           ${note ? `<div class="ap-note">${esc(note)}</div>` : ''}
           ${editor}
           ${opts.length && kind === 'text' ? `<div class="ap-note ap-opts">Options${r.q.meta?.optionsPartial ? ' (partial)' : ''}: ${esc(opts.join(' | '))}</div>` : ''}
-          <div class="ap-row">${editable ? `<button class="ap-primary" data-act="apply"${inForm(r) ? ' hidden' : ''}>${inForm(r) ? 'Apply changes' : 'Apply answer'}</button>` : ''}<button class="${manual ? 'ap-manual-action' : 'ap-locate'}" data-act="locate">${manual ? 'Fill in form' : 'Show in form'} <span aria-hidden="true">↗</span></button>${['profile', 'memory'].includes(r.source) ? `<span class="ap-provenance">${r.source === 'profile' ? 'From your profile' : 'Saved answer'}</span>` : ''}</div>`;
+          <div class="ap-row">${editable ? `<button class="ap-primary" data-act="apply"${showsInForm(r) ? ' hidden' : ''}>${showsInForm(r) ? 'Apply changes' : 'Apply answer'}</button>` : ''}<button class="${manual ? 'ap-manual-action' : 'ap-locate'}" data-act="locate">${manual ? 'Fill in form' : 'Show in form'} <span aria-hidden="true">↗</span></button>${['profile', 'memory'].includes(r.source) ? `<span class="ap-provenance">${r.source === 'profile' ? 'From your profile' : 'Saved answer'}</span>` : ''}</div>`;
         item.querySelector('.ap-label').onclick = () => JAF.highlight(r.q, '#1C3A4B');
         item.querySelector('[data-act="locate"]').onclick = () => {
           JAF.highlight(r.q, '#1C3A4B');
@@ -478,7 +483,7 @@
             root().querySelector('[data-filter="review"] span').textContent = currentResults.filter((x) => isAI(stateOf(x))).length;
             this.summary();
           }));
-          editors.push({ getValue, apply, source: r.source });
+          editors.push({ r, getValue, apply });
         }
         list.appendChild(item);
         const textarea = item.querySelector('textarea');
@@ -494,14 +499,15 @@
       noMatches.hidden = true;
       list.appendChild(noMatches);
       updateFilters();
-      // Apply all: every editable card that holds a value, in list order. Skips empty editors.
+      // Apply all: edited cards and answers that did not reach the form, in list order. Skips empty editors.
       const pending = results.some((r) => r.source === 'pending');
       if (editors.length && !pending) {
+        const waiting = editors.filter((e) => awaitingApply(e.r)).length;
         this.tools(async () => {
           const btn = root().querySelector('[data-act="apply-all"]');
           btn.disabled = true;
           let ok = 0, fail = 0, skipped = 0;
-          for (const e of editors) {
+          for (const e of editors.filter((x) => x.r.dirty || awaitingApply(x.r))) {
             const v = e.getValue();
             if (!v || (Array.isArray(v) && !v.length)) { skipped++; continue; }
             btn.textContent = `Applying ${ok + fail + 1}...`;
@@ -511,7 +517,9 @@
           btn.disabled = false;
           btn.textContent = 'Apply all answers';
           this.tools(applyAllHandler, `Applied ${ok} ${ok === 1 ? 'answer' : 'answers'}${fail ? ` · ${fail} need a retry` : ''}${skipped ? ` · ${skipped} left empty` : ''}`);
-        }, 'Edited an answer? Apply it to the form.');
+        }, waiting ? `${waiting} ${waiting === 1 ? 'answer was' : 'answers were'} not applied to the form.` : 'Apply your edits to the form.');
+        // Shown when something is waiting to be applied; otherwise once an answer is edited.
+        root().querySelector('.ap-tools').hidden = !waiting && !results.some((r) => r.dirty);
       } else {
         this.tools(null);
       }

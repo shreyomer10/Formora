@@ -33,6 +33,7 @@
 #applypilot-root[data-formora-ui="3"] .ap-tools { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 12px; border-top: 1px solid var(--ap-border); background: #f8fafb; }
 #applypilot-root[data-formora-ui="3"] .ap-tools-note { color: var(--ap-muted); font-size: 11px; }
 #applypilot-root[data-formora-ui="3"] .ap-tools button { flex: none; min-height: 24px; padding: 2px 8px; font-size: 11px; }
+#applypilot-root[data-formora-ui="3"] .ap-tools button.ap-primary { background: var(--ap-brand); color: #fff; border-color: var(--ap-brand); }
 #applypilot-root[data-formora-ui="3"] .ap-change { display: flex; flex: none; align-items: center; flex-wrap: wrap; gap: 6px; padding: 7px 12px; color: var(--ap-amber); background: #fff7e8; border-top: 1px solid #eedab7; }
 #applypilot-root[data-formora-ui="3"] .ap-change > span { flex: 1 1 100%; }
 #applypilot-root[data-formora-ui="3"] .ap-list { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #becbd2 transparent; display: flex; flex-direction: column; gap: 8px; padding: 8px; background: #f5f7f9; border-top: 1px solid var(--ap-border); }
