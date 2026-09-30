@@ -117,7 +117,6 @@
   let baseline = null;
   let lastSeen = null;
   let stableTicks = 0;
-  let steps = 0;
 
   // Accept the page as it is now. With `forget`, the previous step's extracted fields are dropped too,
   // so a dismissed "page changed" is not re-announced on the next tick.
@@ -187,8 +186,7 @@
     const { profile, resume, settings, memory } = await loadState();
     JAF.log('Starting', mode, JAF.isGForms() ? 'Google Forms extraction' : 'generic extraction');
     const results = [];
-    steps += 1;
-    if (isTop) { JAF.overlay.setStep(steps); JAF.overlay.empty('Your answers will appear here in a moment.'); JAF.overlay.busy('Reading the form…'); }
+    if (isTop) { JAF.overlay.empty('Your answers will appear here in a moment.'); JAF.overlay.busy('Reading the form…'); }
 
     if (mode === 'fill' && !JAF.isGForms()) {
       if (isTop) JAF.overlay.busy('Checking for Work Experience / Education / Certification sections...');

@@ -60,7 +60,6 @@ function render(next) {
   if (next.summary) JAF.overlay.summary();
   else if (next.busy) JAF.overlay.busy(next.status);
   else JAF.overlay.status(next.status);
-  document.querySelector('.ap-step').textContent = next.step;
   document.querySelectorAll('[data-act="fill"], [data-act="scan"]').forEach((button) => { button.disabled = next.running; });
 }
 

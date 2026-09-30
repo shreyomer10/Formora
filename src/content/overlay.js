@@ -214,7 +214,7 @@
         r.innerHTML = `
           <div class="ap-panel" role="region" aria-label="Formora">
             <div class="ap-head" title="Drag to move. Double-click to reset position and size.">
-              <span class="ap-title"><img class="ap-logo" alt="" src="${chrome.runtime.getURL("icons/dark/icon32.png")}" /> Formora</span><span class="ap-step"></span>
+              <span class="ap-title"><img class="ap-logo" alt="" src="${chrome.runtime.getURL("icons/dark/icon32.png")}" /> Formora</span>
               <button data-act="settings" title="Formora Settings" aria-label="Open Formora Settings">&#9881;</button>
               <button data-act="min" title="Collapse" aria-label="Collapse panel">&#8211;</button>
               <button data-act="close" title="Close" aria-label="Close panel">&#10005;</button>
@@ -273,7 +273,6 @@
       if (b) { b.innerHTML = on ? '&#9633;' : '&#8211;'; b.title = on ? 'Expand' : 'Collapse'; b.setAttribute('aria-label', on ? 'Expand panel' : 'Collapse panel'); }
       store(MIN_KEY, on ? 1 : null);
     },
-    setStep(n) { this.show(); root().querySelector('.ap-step').textContent = n ? `step ${n}` : ''; },
 
     // Empty list with a hint. Used before extraction and whenever the page moves on.
     empty(text) {
