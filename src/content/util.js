@@ -140,6 +140,57 @@
   };
   JAF.aliasOf = (value) => JAF.ALIASES[norm(value)] || null;
 
+  // Degree level of a value ("B.Tech" -> bachelor), for lists that only offer levels ("Bachelor's Degree").
+  const LEVELS = [
+    ['bachelor', /\b(bachelor|undergraduate)\b/], ['master', /\b(master|postgraduate)\b/], ['doctor', /\b(doctor|doctorate|phd)\b/],
+    ['associate', /\bassociate\b/], ['diploma', /\bdiploma\b/], ['high school', /\b(high school|higher secondary|secondary)\b/],
+  ];
+  JAF.degreeLevel = function (value) {
+    const v = `${norm(value)} ${norm(JAF.aliasOf(value) || '')}`;
+    const hit = LEVELS.find(([, re]) => re.test(v));
+    return hit ? hit[0] : null;
+  };
+
+  // Strict pick for searchable dropdowns, where the site's list decides what is valid.
+  // The option must be the same thing as the value, not merely share a word:
+  // "India" -> "India +91" but never "British Indian Ocean Territory"; "IIIT Naya Raipur" never
+  // becomes "IIIT Hyderabad". Two equally good different options mean no pick.
+  const STOP = new Set(['of', 'and', 'the', 'in', 'at', 'for', 'an']);
+  const words = (s) => norm(s).split(' ').filter((t) => t.length > 1 && !STOP.has(t) && !/^\d+$/.test(t));
+  function matchScore(value, label) {
+    const nl = norm(label);
+    if (!nl) return 0;
+    if (nl === norm(value)) return 3;
+    // One comma part of a composite value ("Raipur, Chhattisgarh, India") named exactly.
+    const parts = String(value).split(/\s*,\s*/).filter(Boolean);
+    const vt = new Set(words(value)), ot = new Set(words(label));
+    if (!vt.size || !ot.size) return 0;
+    const m = [...ot].filter((t) => vt.has(t)).length;
+    const f1 = (2 * m) / (vt.size + ot.size);
+    if (f1 === 1) return 2; // same words, other punctuation or a code suffix
+    if (parts.length > 1 && parts.some((p) => norm(p) === nl)) return 1.5;
+    if (m && m === vt.size) return f1; // option spells the value out further
+    if (m >= 2 && m === ot.size) return f1; // option is a real sub-phrase of the value
+    return f1 >= 0.8 ? f1 : 0;
+  }
+  JAF.closestOption = function (value, options) {
+    const variants = [value, JAF.aliasOf(value)].filter(Boolean);
+    let best = null, bestScore = 0, tie = false;
+    for (const o of options || []) {
+      const s = Math.max(...variants.map((v) => matchScore(v, o.label)));
+      if (s > bestScore) { best = o; bestScore = s; tie = false; }
+      else if (s && s === bestScore && norm(o.label) !== norm(best.label)) tie = true;
+    }
+    if (best && !tie) return best;
+    // Degree lists that only name levels.
+    const level = JAF.degreeLevel(value);
+    if (!level) return null;
+    const hits = (options || []).filter((o) => norm(o.label).split(' ').includes(level.split(' ')[0]) || norm(o.label).includes(level));
+    const degrees = hits.filter((o) => /\bdegree\b/.test(norm(o.label)));
+    const pool = hits.length === 1 ? hits : degrees;
+    return pool.length === 1 ? pool[0] : null;
+  };
+
   // Heading-like elements that introduce a section or a repeated entry ("Work Experience 1").
   JAF.HEADING_SEL = 'h1, h2, h3, h4, h5, h6, [role="heading"], legend';
 
