@@ -2,7 +2,7 @@
   "name": "applypilot-e2e",
   "private": true,
   "scripts": {
-    "test": "node fallback.test.js && node security-unit.test.js && node run.js && node features.test.js && node security.test.js",
+    "test": "node pdf-links.test.js && node fallback.test.js && node security-unit.test.js && node run.js && node features.test.js && node security.test.js",
     "test:features": "node features.test.js",
     "assets": "node store-assets.js",
     "test:headful": "node run.js --headful",
