@@ -102,7 +102,7 @@ function serve() {
     expect('resume attached', got.cv === 'asha-resume.pdf');
     expect('experience select 1-3', got.exp === '1-3');
     expect('hidden-input styled radio: degree B.Tech', got.degree === 'btech');
-    expect('searchable country left for manual selection', got.country === '' && got.labels.some((l) => /Country.*Fill manually/.test(l)));
+    expect('searchable country searched and picked from the list', got.country === 'India' && !got.labels.some((l) => /Country.*Fill manually/.test(l)));
     expect('combobox menu closed afterwards', !got.countryMenuOpen);
     expect('memory answer reused', got.proj === 'I built a payments reconciliation service.');
     expect('honeypot untouched', got.honeypot === '');
@@ -130,8 +130,11 @@ function serve() {
 
     await page.evaluate(() => {
       const item = [...document.querySelectorAll('#applypilot-root .ap-item')].find((i) => /Why do you want/.test(i.textContent));
-      item.querySelector('textarea').value = 'Because payments are hard.';
+      const box = item.querySelector('textarea');
+      box.value = 'Because payments are hard.';
+      box.dispatchEvent(new Event('input', { bubbles: true }));
     });
+    expect('Apply all bar appears after an edit', await page.$('#applypilot-root .ap-tools:not([hidden]) [data-act="apply-all"]') !== null);
     await page.click('#applypilot-root [data-act="apply-all"]');
     await page.waitForFunction(() => /Applied \d+/.test(document.querySelector('#applypilot-root .ap-tools-note').textContent));
     const applied = await page.$eval('#why', (e) => e.value);
@@ -211,12 +214,12 @@ function serve() {
       fn: document.getElementById('fn').value, ln: document.getElementById('ln').value, em: document.getElementById('em').value,
       labels: Array.from(document.querySelectorAll('#applypilot-root .ap-label')).map((l) => l.textContent),
       status: (document.querySelector('#applypilot-root .ap-status') || {}).textContent || '',
-      step: (document.querySelector('#applypilot-root .ap-step') || {}).textContent || '',
+      step: !!document.querySelector('#applypilot-root .ap-step'),
     }));
     console.log(JSON.stringify(w1, null, 1));
     expect('wd step1: name + email filled', w1.fn === 'Asha' && w1.ln === 'Verma' && w1.em === 'asha@example.com');
     expect('wd step1: header language/settings buttons ignored', !w1.labels.some((l) => /selector button/i.test(l)));
-    expect('wd step1: panel shows step 1', /step 1/.test(w1.step));
+    expect('wd step1: no step counter in the header', !w1.step);
 
     // Drag the panel by its header.
     const drag = await page.evaluate(async () => {
@@ -250,7 +253,7 @@ function serve() {
     expect('wd step2: dismissing "Page changed" keeps it dismissed', dismissed);
     await page.evaluate(() => {
       window.typeaheadEvents = 0;
-      for (const input of document.querySelectorAll('.search input')) {
+      for (const input of document.querySelectorAll('.search.multi input')) {
         for (const name of ['focus', 'input', 'keydown', 'change']) {
           input.addEventListener(name, () => window.typeaheadEvents++);
         }
@@ -284,7 +287,6 @@ function serve() {
         cv: document.getElementById('cvname').textContent,
         certFile: document.querySelector('[data-entry="cert"] input[type=file]').files.length,
         status: (document.querySelector('#applypilot-root .ap-status') || {}).textContent || '',
-        step: (document.querySelector('#applypilot-root .ap-step') || {}).textContent || '',
         items: Array.from(document.querySelectorAll('#applypilot-root .ap-item')).map((i) => i.textContent.replace(/\s+/g, ' ').slice(0, 120)),
       };
     });
@@ -298,15 +300,14 @@ function serve() {
     expect('wd: work 2 from entry 2 with To = 06/2022', w2.w1.title === 'Software Intern' && w2.w1.company === 'Beta Labs' && w2.w1.current === false && w2.w1.dates[1] === '06/2022');
     expect('wd: education school', w2.e0.school === 'IIIT Naya Raipur');
     expect('wd: degree "B.Tech" -> "Bachelor of Technology" in popup dropdown', w2.e0.degree === 'Bachelor of Technology');
-    expect('wd: field of study left for manual selection', w2.e0.field === '');
+    expect('wd: searchable field of study picked from the list', w2.e0.field === 'Data Science and Artificial Intelligence');
     expect('wd: certification name + number + issued date 03/15/2024', w2.c0.name === 'AWS Certified Developer' && w2.c0.number === 'AWS-123' && w2.c0.dates[0] === '03/15/2024');
     expect('wd: searchable skills left untouched', w2.chips.length === 0);
-    expect('wd: no discovery, typing or Enter events on searchable controls', w2.typeaheadEvents === 0);
-    expect('wd: two manual cards with suggestions and Locate, without Apply', w2.manualCards.length === 2 && w2.manualCards.every((c) => !c.apply && c.locate) && w2.manualCards.some((c) => c.text.includes('Data Science and Artificial Intelligence')) && w2.manualCards.some((c) => c.text.includes('Python, Docker, Kotlin, Haskell')));
-    expect('wd: manual fields excluded from filled count', /Filled 18 of 23 fields/.test(w2.status));
+    expect('wd: no discovery, typing or Enter events on the multi-select skills box', w2.typeaheadEvents === 0);
+    expect('wd: one manual card (skills) with suggestion and Locate, without Apply', w2.manualCards.length === 1 && w2.manualCards.every((c) => !c.apply && c.locate) && w2.manualCards[0].text.includes('Python, Docker, Kotlin, Haskell'));
+    expect('wd: manual fields excluded from filled count', /Filled 19 of 23 fields/.test(w2.status));
     expect('wd: resume attached through the drop zone', w2.cv === 'Uploaded: asha-resume.pdf');
     expect('wd: certification attachment left alone', w2.certFile === 0);
-    expect('wd: panel shows step 2', /step 2/.test(w2.step));
     console.log('status:', w2.status);
 
     // Direct calls must also refuse searches, even with existing query text,
@@ -327,6 +328,50 @@ function serve() {
     });
     expect('direct fill: searchable controls cannot bypass manual fallback', !guards.result.ok && guards.result.manual && guards.events === 0 && guards.value === 'existing query' && guards.discovered === 0);
     expect('button dropdown: ignored selection is not counted as filled', !guards.button.ok);
+
+    // Searchable single-choice dropdowns: react-select style, results after a short "server" delay.
+    const search = await browser.newPage();
+    await search.goto(`http://localhost:${PORT}/`); // a real localhost page is a secure context, as real sites are
+    await search.evaluate(() => { document.body.innerHTML = '<div id="app"></div>'; });
+    for (const script of ['util.js', 'filler.js']) await search.addScriptTag({ path: path.join(EXT, 'src/content', script) });
+    const searched = await search.evaluate(async () => {
+      function widget(id, items) {
+        const wrap = document.createElement('div'); wrap.innerHTML = `<label for="${id}">${id}</label><div class="select__control"><div class="select__value"></div><input id="${id}" role="combobox" aria-autocomplete="list"></div>`;
+        document.getElementById('app').appendChild(wrap);
+        const input = wrap.querySelector('input'), shown = wrap.querySelector('.select__value');
+        let menu = null, timer = null;
+        const close = () => { menu?.remove(); menu = null; };
+        const render = () => {
+          close(); menu = document.createElement('div'); menu.className = 'select__menu';
+          const q = input.value.toLowerCase();
+          const hits = items.filter((i) => i.toLowerCase().includes(q));
+          if (!hits.length) menu.innerHTML = '<div class="select__menu-notice">No options</div>';
+          hits.forEach((h) => { const o = document.createElement('div'); o.setAttribute('role', 'option'); o.textContent = h; o.onclick = () => { shown.textContent = h; input.value = ''; close(); }; menu.appendChild(o); });
+          wrap.appendChild(menu);
+        };
+        input.addEventListener('mousedown', render);
+        input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 250); });
+        input.addEventListener('blur', () => { input.value = ''; setTimeout(close, 50); });
+        return { input, shown };
+      }
+      const school = widget('school', ['IIIT Allahabad', 'IIIT Bangalore', 'IIIT Hyderabad', 'International Institute of Information Technology, Hyderabad']);
+      const degree = widget('degree', ["Associate's Degree", "Bachelor's Degree", "Master's Degree", 'Doctor of Philosophy (Ph.D.)']);
+      const field = widget('field', ['Computer Science', 'Data Science', 'Electrical Engineering']);
+      const city = widget('city', ['Raipur, Rajasthan, India', 'Raipur, Chhattisgarh, India', 'Raipur, West Bengal, India']);
+      JAF.registry = new Map([['school', { kind: 'single', el: school.input, options: [] }], ['degree', { kind: 'single', el: degree.input, options: [] }], ['field', { kind: 'single', el: field.input, options: [] }], ['city', { kind: 'single', el: city.input, options: [] }]]);
+      const fill = (id, v) => JAF.fill({ id, type: 'combobox', options: [], meta: {} }, v);
+      return {
+        school: await fill('school', 'International Institute of Information Technology, Naya Raipur'), schoolShown: school.shown.textContent, schoolInput: school.input.value,
+        degree: await fill('degree', 'B.Tech'), degreeShown: degree.shown.textContent,
+        field: await fill('field', 'Data Science and Artificial Intelligence'), fieldShown: field.shown.textContent,
+        city: await fill('city', 'Raipur, Chhattisgarh, India'), cityShown: city.shown.textContent,
+      };
+    });
+    console.log(JSON.stringify(searched));
+    expect('searchable: a college missing from the list is never swapped for another', !searched.school.ok && searched.schoolShown === '' && searched.schoolInput === '');
+    expect('searchable: "B.Tech" picks "Bachelor\'s Degree" and asks to check it', searched.degree.ok && searched.degreeShown === "Bachelor's Degree" && /Check it/.test(searched.degree.note));
+    expect('searchable: "Data Science and AI" picks the closest real option', searched.field.ok && searched.fieldShown === 'Data Science');
+    expect('searchable: city picks the Raipur in the right state', searched.city.ok && searched.cityShown === 'Raipur, Chhattisgarh, India');
     await controls.evaluate(() => {
       window.styleRequests = [];
       JAF.worker = (msg) => chrome.runtime.sendMessage(msg);
@@ -364,10 +409,10 @@ function serve() {
       const heading = root.querySelector('.ap-status strong').getBoundingClientRect();
       const detail = root.querySelector('.ap-status-detail').getBoundingClientRect();
       const styling = root.querySelector('.ap-title').textContent.trim() === 'Formora'
-        && detail.top > heading.bottom
-        && /fields\s+1 field still needs your input/.test(root.querySelector('.ap-status-text').textContent)
+        && Math.abs(detail.top - heading.top) < 6
+        && /Filled 0 of 2 fields\s*· 1 needs you/.test(root.querySelector('.ap-status-text').textContent)
         && getComputedStyle(root.querySelector('.ap-actions [data-act="fill"]')).backgroundColor === 'rgb(28, 58, 75)'
-        && getComputedStyle(root.querySelector('[data-filter="all"]')).borderRadius === '9px'
+        && getComputedStyle(root.querySelector('[data-filter="all"]')).borderRadius === '7px'
         && getComputedStyle(root.querySelector('.ap-change')).display === 'none';
       root.querySelector('[data-filter="review"]').click();
       const card = root.querySelector('.ap-item:not([hidden])');
@@ -385,6 +430,22 @@ function serve() {
       return { styling, onlyReview, dirty, failed, success };
     });
     expect('review panel: review filter, unsaved edits, failed apply and successful retry', Object.values(transitions).every(Boolean));
+    // Automatic apply failed for one answer: Apply all appears without any edit and applies only that one.
+    const retry = await panelTest.evaluate(async () => {
+      const applied = [];
+      const results = [
+        { q: { id: 'college', label: 'College / University Name', type: 'text', options: [], currentValue: '' }, source: 'fail', value: 'Synthetic Institute', note: 'page rejected the value' },
+        { q: { id: 'name', label: 'Name', type: 'text', options: [], currentValue: 'Asha Verma' }, source: 'skip', value: 'Asha Verma', note: 'already filled' },
+      ];
+      JAF.overlay.render(results, async (q, v) => { applied.push(`${q.id}=${v}`); return { ok: true }; });
+      const root = document.getElementById('applypilot-root');
+      const bar = root.querySelector('.ap-tools');
+      const before = { barShown: !bar.hidden, note: bar.textContent, existingApplyHidden: [...root.querySelectorAll('.ap-item')].find((i) => i.dataset.state === 'existing').querySelector('[data-act="apply"]').hidden };
+      root.querySelector('[data-act="apply-all"]').click();
+      await new Promise((r) => setTimeout(r, 100));
+      return { ...before, applied, after: root.querySelector('.ap-tools-note').textContent };
+    });
+    expect('apply all: shown when an automatic apply failed, applies only that answer', retry.barShown && /1 answer was not applied/.test(retry.note) && retry.existingApplyHidden && retry.applied.join() === 'college=Synthetic Institute' && /Applied 1 answer/.test(retry.after));
     await panelTest.close();
     await controls.close();
   } catch (e) {
