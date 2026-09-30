@@ -1,0 +1,100 @@
+# Builds the Chrome Web Store ZIP: manifest.json at the root, plus src/, icons/ and privacy.html.
+# Every push and pull request gets a downloadable artifact. Pushing a tag like v0.3.0 also
+# publishes a GitHub Release with the ZIP attached, ready to upload in the developer dashboard.
+name: Package extension
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Browser suites (run.js, features, security) need a desktop Chrome with the
+      # extension loaded; run them locally with `npm test` in test/e2e before tagging.
+      - name: Unit tests
+        working-directory: test/e2e
+        run: |
+          node pdf-links.test.js
+          node fallback.test.js
+          node security-unit.test.js
+
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Tag matches manifest version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ "${GITHUB_REF_NAME#v}" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match manifest version ${{ steps.version.outputs.version }}. Bump manifest.json first."
+            exit 1
+          fi
+
+      - name: Build ZIP
+        run: |
+          mkdir -p dist
+          zip -r -X -q "dist/formora-${{ steps.version.outputs.version }}.zip" manifest.json src icons privacy.html
+
+      - name: Check ZIP contents
+        env:
+          ZIP: dist/formora-${{ steps.version.outputs.version }}.zip
+        run: |
+          stage=$(mktemp -d)
+          unzip -q "$ZIP" -d "$stage"
+          test "$(ls "$stage" | sort | tr '\n' ' ')" = "icons manifest.json privacy.html src "
+          node - "$stage" <<'EOF'
+          const fs = require('fs'), path = require('path');
+          const stage = process.argv[2];
+          const m = JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8'));
+          const files = [m.background.service_worker, m.options_page, m.side_panel.default_path, m.action.default_popup,
+            ...m.content_scripts.flatMap((c) => [...c.js, ...(c.css || [])]), ...Object.values(m.icons), 'privacy.html'];
+          for (const f of files) if (!fs.statSync(path.join(stage, f), { throwIfNoEntry: false })?.isFile()) throw new Error(`Missing in ZIP: ${f}`);
+          // Every relative src/href in packaged HTML must resolve inside the ZIP.
+          for (const f of fs.readdirSync(path.join(stage, 'src'), { recursive: true }).filter((f) => f.endsWith('.html'))) {
+            const abs = path.join(stage, 'src', f);
+            for (const [, ref] of fs.readFileSync(abs, 'utf8').matchAll(/(?:src|href)="([^"#]+)"/g)) {
+              if (!/^[a-z]+:/i.test(ref) && !fs.existsSync(path.resolve(path.dirname(abs), ref))) throw new Error(`Broken link: ${f} -> ${ref}`);
+            }
+          }
+          if (m.content_scripts[0].all_frames !== false) throw new Error('content scripts must stay top-frame only');
+          console.log(`ZIP OK: version ${m.version}, ${files.length} manifest files present`);
+          EOF
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: formora-${{ steps.version.outputs.version }}
+          path: dist/formora-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release with the store ZIP
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
