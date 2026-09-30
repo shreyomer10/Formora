@@ -14,7 +14,7 @@ Fill job applications from your profile and resume. Review every answer in a sid
 
 Spend less time repeating your profile across job applications.
 
-Formora reads application questions and fills supported fields from your saved profile and resume. Use your own Gemini API key to extract a PDF resume and draft answers to open-ended questions. Review and edit the result before submitting the application yourself.
+Formora reads application questions and fills supported fields from your saved profile and resume. Use your own Gemini API key to extract a PDF resume and draft answers to open-ended questions. AI answers go straight into the form, and you can edit any of them in the panel (or switch to reviewing drafts before they are applied). Then submit the application yourself. Consent and sensitive declarations stay manual.
 
 - Choose the browser's native side panel or a movable, resizable dialog.
 - Set up with a guide: API key, resume, extraction, review and save.
@@ -31,7 +31,7 @@ Your setup is stored locally in Chrome. AI features send resume/profile informat
 
 Single purpose: help the user fill and review job application forms from their own profile and resume.
 
-Disclose handling of personally identifiable information, authentication information (API key), website content, and user-provided profile/resume/form content. Profile facts may include sensitive categories depending on what users enter; review the dashboard's current categories against `privacy.html`. Page URLs can be part of AI context. Data sent to Google must be disclosed even though the publisher has no backend.
+Disclose handling of personally identifiable information, authentication information (API key), website content, and user-provided profile/resume/form content. Profile facts may include sensitive categories depending on what users enter; review the dashboard's current categories against `privacy.html`. Only page origins are included in AI URL context; paths, query strings and fragments are omitted. Data sent to Google must be disclosed even though the publisher has no backend.
 
 Permission justifications:
 - `storage`: save profile, resume, API key, settings, answers and setup progress locally.
@@ -39,7 +39,7 @@ Permission justifications:
 - `scripting`: inject or refresh form controls and panel styles on that page.
 - `sidePanel`: display the review UI beside the application in the browser-owned panel, without covering the page.
 - Google API host: direct, user-key-authenticated AI extraction and answer requests.
-- HTTP/HTTPS content scripts, all frames: support application forms on different domains and embedded upload pickers; detect step changes without submitting forms.
+- Top-level HTTPS and loopback HTTP content scripts: support different application sites and local tests; detect SPA step changes. Personal data access requires explicit document authorization. Unrelated frames are not filled; Drive-picker uploads are manual.
 
 Remote code: none. Model responses are treated as data, not executed.
 
@@ -55,3 +55,5 @@ Before submission:
 3. Review the privacy disclosures, distribution regions and Google's current API terms for this product. These are publisher decisions.
 4. Test the selected model chain with a suitable API project; perform a real application-page review and attach screenshots from this release.
 5. Package runtime files, icons and privacy.html only; omit tests, node_modules and repository metadata. Upload through the Chrome Web Store developer dashboard. Nothing has been published by this change.
+
+Store assets were regenerated from 0.2.1 with synthetic data, including the AI-sharing setting and native review panel. Review the images and listing together before submission. See `PUBLISHING.md` and `SECURITY-REMEDIATION.md`.
