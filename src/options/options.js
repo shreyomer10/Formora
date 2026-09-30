@@ -80,6 +80,10 @@ const LISTS = {
     el: 'certList',
     fields: [['name', 'Certification'], ['issuer', 'Issuer'], ['number', 'Credential number'], ['issued', 'Issued (YYYY-MM)'], ['expires', 'Expires (YYYY-MM)']],
   },
+  customFields: {
+    el: 'customList',
+    fields: [['label', 'Field name (as forms ask it, e.g. Kaggle profile)'], ['value', 'Value']],
+  },
 };
 
 function renderList(key, items) {
@@ -272,7 +276,19 @@ $('extract').onclick = async () => {
       // Only replace a list the user has not filled in by hand.
       if (Array.isArray(profile[k]) && profile[k].length && !readList(k).length) renderList(k, profile[k]);
     });
-    $('resumeMsg').textContent = 'Done. Review the profile fields below and save.';
+    // Custom fields merge: keep the user's own, add facts the resume adds under new names.
+    const own = readList('customFields');
+    const known = new Set(own.map((f) => String(f.label || '').toLowerCase().trim()));
+    // Profile links on other sites (Codeforces, CodeChef, Kaggle) come from the PDF's hyperlinks.
+    const fromResume = [...linked.extra, ...(Array.isArray(profile.customFields) ? profile.customFields : [])];
+    const found = fromResume.filter((f) => {
+      const label = String(f?.label || '').toLowerCase().trim();
+      if (!label || !f.value || known.has(label)) return false;
+      known.add(label);
+      return true;
+    });
+    if (found.length) renderList('customFields', own.concat(found));
+    $('resumeMsg').textContent = `Done. ${links.length ? `Read ${links.length} link${links.length === 1 ? '' : 's'} from the PDF. ` : ''}Review the profile fields below and save.`;
     updateSetup();
   } catch (e) { $('resumeMsg').textContent = 'Failed: ' + e.message; }
   finally { $('extract').disabled = false; }

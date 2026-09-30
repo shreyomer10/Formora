@@ -74,6 +74,25 @@
     return null;
   }
 
+  // Custom profile fields ("Kaggle profile" -> url): the label must name the field as a whole phrase.
+  function customMatch(q, profile) {
+    if (q.type === 'file' || !Array.isArray(profile.customFields)) return null;
+    const label = ` ${JAF.normalizeLabel(q.label)} `;
+    let best = null;
+    for (const f of profile.customFields) {
+      const key = JAF.normalizeLabel(f?.label);
+      const value = String(f?.value || '').trim();
+      if (!key || !value || (best && key.length <= best.key.length)) continue;
+      if (label.trim() === key || (key.length >= 4 && label.includes(` ${key} `)) || (label.trim().length >= 4 && ` ${key} `.includes(label))) best = { key, value };
+    }
+    if (!best) return null;
+    if (q.options && q.options.length) {
+      const opt = JAF.bestOption(best.value, q.options.map((o) => ({ label: o, value: o })));
+      return opt ? { value: opt.label } : null;
+    }
+    return { value: best.value };
+  }
+
   async function loadState() {
     const response = await JAF.worker({ type: 'GET_FILL_STATE' });
     if (!response?.ok) throw new Error(response?.error || 'Open Formora from the toolbar to authorize this page.');
@@ -219,6 +238,13 @@
       if (m) {
         const res = await JAF.fill(q, m.value, resume);
         results.push({ q, source: res.ok ? 'profile' : 'fail', value: m.value === '__resume' ? (resume.fileName || 'resume') : m.value, note: res.note });
+        if (res.ok) JAF.highlight(q, '#16a34a');
+        continue;
+      }
+      const custom = hasEntry || q.meta?.entry ? null : customMatch(q, profile);
+      if (custom) {
+        const res = await JAF.fill(q, custom.value, resume);
+        results.push({ q, source: res.ok ? 'profile' : 'fail', value: custom.value, note: res.note });
         if (res.ok) JAF.highlight(q, '#16a34a');
         continue;
       }

@@ -100,6 +100,13 @@ const CERT_ITEM = {
   additionalProperties: false,
 };
 
+const CUSTOM_ITEM = {
+  type: 'object',
+  properties: { label: { type: 'string', description: 'What a form would ask, e.g. "Kaggle profile", "Languages spoken"' }, value: { type: 'string' } },
+  required: ['label', 'value'],
+  additionalProperties: false,
+};
+
 const PROFILE_SCHEMA = {
   type: 'object',
   properties: {
@@ -120,8 +127,9 @@ const PROFILE_SCHEMA = {
         workExperience: { type: 'array', items: WORK_ITEM, description: 'Most recent first. Internships count.' },
         education: { type: 'array', items: EDU_ITEM, description: 'Most recent first.' },
         certifications: { type: 'array', items: CERT_ITEM },
+        customFields: { type: 'array', items: CUSTOM_ITEM, description: 'Other facts the resume states that no field above covers: other profile links (Kaggle, Medium, Stack Overflow), spoken languages, publications, awards, hackathons, positions of responsibility, availability. Short label, value as written. Never repeat facts captured above.' },
       },
-      required: ['firstName', 'lastName', 'email', 'phone', 'city', 'state', 'country', 'linkedin', 'github', 'portfolio', 'currentCompany', 'currentTitle', 'totalExperienceYears', 'skills', 'college', 'degree', 'branch', 'graduationYear', 'cgpa', 'tenthPercentage', 'twelfthPercentage', 'rollNumber', 'workExperience', 'education', 'certifications'],
+      required: ['firstName', 'lastName', 'email', 'phone', 'city', 'state', 'country', 'linkedin', 'github', 'portfolio', 'currentCompany', 'currentTitle', 'totalExperienceYears', 'skills', 'college', 'degree', 'branch', 'graduationYear', 'cgpa', 'tenthPercentage', 'twelfthPercentage', 'rollNumber', 'leetcode', 'workExperience', 'education', 'certifications', 'customFields'],
       additionalProperties: false,
     },
   },
@@ -156,7 +164,7 @@ Other rules:
 - Write in the language the question is written in.`;
 
 function buildCandidateBlock({ profile, resume, settings }) {
-  const professional = ['skills', 'currentCompany', 'currentTitle', 'totalExperienceYears', 'workExperience', 'education', 'certifications', 'college', 'degree', 'branch', 'graduationYear'];
+  const professional = ['skills', 'currentCompany', 'currentTitle', 'totalExperienceYears', 'workExperience', 'education', 'certifications', 'college', 'degree', 'branch', 'graduationYear', 'customFields'];
   const p = Object.fromEntries(professional.filter((k) => profile[k] != null).map((k) => [k, profile[k]]));
   let resumeText = String(resume?.text || '').slice(0, SEC.maxText);
   for (const key of ['email', 'phone', 'dob', 'address', 'rollNumber', 'expectedCtc', 'currentCtc']) {

@@ -139,6 +139,11 @@
     </label>
   </div>
 
+  <h3 id="customFields">Your own fields</h3>
+  <p class="muted">Add anything forms ask that has no box above, such as Kaggle profile, languages spoken or preferred work location. Name it the way forms ask for it; a question with that name is filled with your value. Resume extraction adds facts it finds here too. These fields are sent to Gemini as context for AI answers, so keep ID numbers out.</p>
+  <div id="customList" class="list"></div>
+  <div class="row"><button data-add="customFields" class="primary">+ Add a field</button></div>
+
   <h2>3b. Work experience, education, certifications</h2>
   <p class="muted">Used for forms with repeatable blocks (Workday "Add" buttons and the like): one block is added per entry and its fields filled from that entry. Most recent first. Dates as YYYY-MM.</p>
   <h3>Work experience</h3>
