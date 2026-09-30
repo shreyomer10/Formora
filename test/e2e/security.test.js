@@ -44,7 +44,8 @@ function pass(name) { checks++; console.log('PASS', name); }
     await options.evaluate(() => chrome.storage.local.set({
       profile: { email: 'audit@example.invalid', skills: 'Node.js' },
       resume: { base64: btoa('synthetic resume'), fileName: 'audit.pdf', mimeType: 'application/pdf', text: 'Engineer with Node.js experience' },
-      settings: { apiKey: 'SYNTHETIC_KEY_NEVER_FOR_PAGE', aiConsent: true, panelLayout: 'dialog' }, memory: {},
+      // Review-first mode: drafts wait for approval. Auto-apply is checked separately below.
+      settings: { apiKey: 'SYNTHETIC_KEY_NEVER_FOR_PAGE', aiConsent: true, panelLayout: 'dialog', autoApply: false }, memory: {},
     }));
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}/?token=URL_SECRET#fragment-secret`);
@@ -133,6 +134,16 @@ function pass(name) { checks++; console.log('PASS', name); }
     assert.equal(stale.ok, false); assert.match(stale.error, /authorize/);
     assert.equal(await page.$eval('#email', (e) => e.value), '');
     pass('S1: a full navigation invalidates previous document authorization');
+
+    await options.evaluate(async () => { const { settings } = await chrome.storage.local.get('settings'); await chrome.storage.local.set({ settings: { ...settings, autoApply: true } }); });
+    const auto = await options.evaluate((tabId) => chrome.runtime.sendMessage({ type: 'RUN_TAB', tabId, mode: 'fill' }), tabId);
+    assert(auto.ok, auto.error);
+    assert.equal(await page.$eval('#experience', (e) => e.value), 'PRIVATE_AI_DRAFT');
+    assert.equal(await page.$eval('#consent', (e) => e.checked), false);
+    assert.equal(await page.$eval('#authorization', (e) => e.value), '');
+    assert.equal(await page.$('#applypilot-root [data-act="review-draft"]'), null);
+    assert.equal(Object.keys(await options.evaluate(async () => (await chrome.storage.local.get('memory')).memory)).length, 1);
+    pass('Auto-apply: AI answers are written after an authorized fill; declarations stay manual and nothing new is remembered');
 
     await options.bringToFront();
     // CDP provides an in-memory File to exercise the actual change handler.

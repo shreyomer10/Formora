@@ -13,7 +13,7 @@ globalThis.FormoraSecurity = Object.freeze({
     try { const u = new URL(value); return u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)); } catch { return false; }
   },
   settings(settings = {}) {
-    return { hasApiKey: !!settings.apiKey, overwrite: !!settings.overwrite, panelLayout: settings.panelLayout === 'sidebar' ? 'sidebar' : 'dialog', aiConsent: settings.aiConsent === true };
+    return { hasApiKey: !!settings.apiKey, overwrite: !!settings.overwrite, panelLayout: settings.panelLayout === 'sidebar' ? 'sidebar' : 'dialog', aiConsent: settings.aiConsent === true, autoApply: settings.autoApply !== false };
   },
   validateFill(payload) {
     if (!payload || !Array.isArray(payload.questions) || payload.questions.length > this.maxQuestions || JSON.stringify(payload).length > 256000) throw new Error('Too many questions or too much form context. Fill a smaller section.');

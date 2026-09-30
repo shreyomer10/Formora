@@ -186,6 +186,7 @@ async function load() {
   $('panelLayout').value = settings.panelLayout === 'sidebar' ? 'sidebar' : 'dialog';
   $('effort').value = settings.effort || 'medium';
   $('overwrite').checked = !!settings.overwrite;
+  $('autoApply').checked = settings.autoApply !== false;
   $('customInstructions').value = settings.customInstructions || '';
   profileInputs().forEach((el) => (el.value = profile[el.dataset.k] || ''));
   Object.keys(LISTS).forEach((k) => renderList(k, profile[k]));
@@ -228,6 +229,7 @@ async function save(completeSetup = false) {
     panelLayout: $('panelLayout').value,
     effort: $('effort').value,
     overwrite: $('overwrite').checked,
+    autoApply: $('autoApply').checked,
     customInstructions: $('customInstructions').value.trim(),
   };
   const profile = {};

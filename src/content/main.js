@@ -311,12 +311,20 @@
         } else {
           if (resp.fallbackNote) results.push({ source: 'info', note: resp.fallbackNote });
           const byId = new Map((resp.answers || []).map((a) => [a.id, a]));
+          if (settings.autoApply) JAF.overlay.busy('Applying AI answers to the form…');
           for (const q of pending) {
             const a = byId.get(q.id);
             if (!a || a.skip) { results.push({ q, source: 'skip', value: '', note: 'No grounded draft available. Enter this answer yourself.' }); continue; }
             const value = q.type === 'checkbox' ? (a.values && a.values.length ? a.values : [a.value]).filter(Boolean) : a.value;
             if (q.type === 'checkbox' && !value.length) { results.push({ q, source: 'skip', value: '', note: 'left unticked' }); continue; }
             if (!q.type.match(/checkbox/) && !String(value || '').trim()) { results.push({ q, source: 'skip', value: '', note: 'model returned nothing' }); continue; }
+            if (settings.autoApply) {
+              // Written straight into the form; the panel keeps an editable copy. Not remembered until the user applies an edit.
+              const res = await JAF.fill(q, value, resume);
+              results.push(res.ok ? { q, source: 'ai', applied: true, value, note: res.note || '' } : { q, source: 'fail', value, note: res.note });
+              if (res.ok) JAF.highlight(q, '#245fa0');
+              continue;
+            }
             // Keep drafts in the isolated world. Only the browser-owned panel sees their values.
             results.push({ q, source: 'ai', value, note: 'Draft only. Review in the browser side panel before applying.' });
           }

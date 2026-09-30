@@ -155,7 +155,7 @@
     if (r.source === 'pending') return 'pending';
     if (r.source === 'fail') return 'fail';
     if (r.source === 'manual' || r.q?.meta?.manualFill) return 'manual';
-    if (r.source === 'ai') return 'review';
+    if (r.source === 'ai') return r.applied ? 'aiApplied' : 'review';
     if (['profile', 'memory'].includes(r.source)) return 'filled';
     if (/^(current position: end date left empty|not a current position|left unticked)$/.test(r.note || '')) return 'blank';
     return r.q?.currentValue ? 'existing' : 'skipped';
@@ -167,19 +167,22 @@
     skipped: { label: 'Needs your answer', icon: '!', cls: 'ap-skip' },
     edited: { label: 'Unsaved changes', icon: '!', cls: 'ap-skip' },
     review: { label: 'Review AI answer', icon: '↗', cls: 'ap-ai' },
+    aiApplied: { label: 'AI answer', icon: '✓', cls: 'ap-ai' },
     filled: { label: 'Filled', icon: '✓', cls: 'ap-ok' },
     existing: { label: 'Already filled', icon: '✓', cls: 'ap-existing' },
     blank: { label: 'Left blank', icon: '–', cls: 'ap-existing' },
     pending: { label: 'Preparing answer', icon: '·', cls: 'ap-pending' },
   };
   const needsYou = (r) => ['manual', 'fail', 'skipped', 'edited'].includes(stateOf(r));
+  const isAI = (state) => state === 'review' || state === 'aiApplied';
+  const inForm = (r) => ['profile', 'memory'].includes(r.source) || (r.source === 'ai' && r.applied);
 
   function filterCards() {
     const r = root();
     for (const card of r.querySelectorAll('.ap-item')) {
       const state = card.dataset.state;
       card.hidden = currentFilter === 'attention' ? !['manual', 'fail', 'skipped', 'edited'].includes(state)
-        : currentFilter === 'review' ? state !== 'review' : false;
+        : currentFilter === 'review' ? !isAI(state) : false;
     }
     for (const button of r.querySelectorAll('[data-filter]')) button.setAttribute('aria-pressed', String(button.dataset.filter === currentFilter));
     const empty = r.querySelector('.ap-filter-empty');
@@ -191,7 +194,7 @@
     const fields = currentResults.filter((r) => r.q);
     const filters = root().querySelector('.ap-filters');
     filters.hidden = !fields.length || fields.some((r) => r.source === 'pending');
-    const counts = { all: fields.length, attention: fields.filter(needsYou).length, review: fields.filter((r) => stateOf(r) === 'review').length };
+    const counts = { all: fields.length, attention: fields.filter(needsYou).length, review: fields.filter((r) => isAI(stateOf(r))).length };
     for (const button of filters.querySelectorAll('[data-filter]')) button.querySelector('span').textContent = counts[button.dataset.filter];
     filterCards();
   }
@@ -199,6 +202,7 @@
   function userNote(r, state) {
     if (state === 'manual') return r.value ? 'Choose this answer in the form. Use the suggested value below.' : 'This field needs a selection in the form.';
     if (state === 'review') return 'Draft only. Check this answer, then Apply to share it with the website.';
+    if (state === 'aiApplied') return r.note || '';
     if (state === 'filled') return /\bcheck\b|verify|could not|does not|not found/i.test(r.note || '') ? r.note : '';
     if (state === 'existing') return '';
     if (state === 'blank') return r.note === 'current position: end date left empty' ? 'No end date needed for your current role.' : 'Left unselected based on your profile.';
@@ -251,7 +255,7 @@
     status(text) { this.show(text); },
     summary(results = currentResults) {
       const fields = results.filter((r) => r.q);
-      const filled = fields.filter((r) => ['profile', 'memory'].includes(r.source)).length;
+      const filled = fields.filter(inForm).length;
       const attention = fields.filter(needsYou).length;
       this.show();
       root().querySelector('.ap-spin').hidden = true;
@@ -358,7 +362,7 @@
       const editors = []; // for Apply all
       for (const r of results) {
         const item = document.createElement('div');
-        if (!nativePanel && r.source === 'ai') {
+        if (!nativePanel && r.source === 'ai' && !r.applied) {
           item.className = 'ap-item ap-ai'; item.dataset.state = 'review';
           item.innerHTML = `<div class="ap-label">${esc(r.q.label)}</div><div class="ap-note">An AI draft is ready. Review it in the browser side panel before sharing it with this website.</div><button data-act="review-draft">Review AI draft</button>`;
           item.querySelector('button').onclick = () => JAF.worker({ type: 'OPEN_REVIEW' }).then((r) => { if (!r.ok) this.status(r.error); }).catch((e) => this.status(e.message));
@@ -410,7 +414,7 @@
           ${note ? `<div class="ap-note">${esc(note)}</div>` : ''}
           ${editor}
           ${opts.length && kind === 'text' ? `<div class="ap-note ap-opts">Options${r.q.meta?.optionsPartial ? ' (partial)' : ''}: ${esc(opts.join(' | '))}</div>` : ''}
-          <div class="ap-row">${editable ? '<button class="ap-primary" data-act="apply">Apply answer</button>' : ''}<button class="${manual ? 'ap-manual-action' : 'ap-locate'}" data-act="locate">${manual ? 'Fill in form' : 'Show in form'} <span aria-hidden="true">↗</span></button>${['profile', 'memory'].includes(r.source) ? `<span class="ap-provenance">${r.source === 'profile' ? 'From your profile' : 'Saved answer'}</span>` : ''}</div>`;
+          <div class="ap-row">${editable ? `<button class="ap-primary" data-act="apply"${inForm(r) ? ' hidden' : ''}>${inForm(r) ? 'Apply changes' : 'Apply answer'}</button>` : ''}<button class="${manual ? 'ap-manual-action' : 'ap-locate'}" data-act="locate">${manual ? 'Fill in form' : 'Show in form'} <span aria-hidden="true">↗</span></button>${['profile', 'memory'].includes(r.source) ? `<span class="ap-provenance">${r.source === 'profile' ? 'From your profile' : 'Saved answer'}</span>` : ''}</div>`;
         item.querySelector('.ap-label').onclick = () => JAF.highlight(r.q, '#1C3A4B');
         item.querySelector('[data-act="locate"]').onclick = () => {
           JAF.highlight(r.q, '#1C3A4B');
@@ -442,6 +446,7 @@
             try { res = await onReapply(r.q, v); } catch { res = { ok: false, note: 'Could not apply this answer. Try again or fill it in the form.' }; }
             finally { applyBtn.disabled = false; }
             applyBtn.textContent = res.ok ? 'Applied ✓' : 'Try again';
+            applyBtn.hidden = false;
             r.source = res.ok ? 'memory' : 'fail';
             r.note = res.note || (res.ok ? 'Your answer has been updated in the form.' : 'Please fill this answer in the form.');
             r.dirty = false;
@@ -461,6 +466,8 @@
           item.querySelectorAll('textarea, select, input').forEach((input) => input.addEventListener('input', () => {
             r.dirty = true;
             applyBtn.textContent = 'Apply changes';
+            applyBtn.hidden = false;
+            root().querySelector('.ap-tools').hidden = !applyAllHandler;
             item.dataset.state = 'edited';
             item.className = 'ap-item ap-skip';
             item.querySelector('.ap-state').textContent = '! Unsaved changes';
@@ -468,7 +475,7 @@
             // the user switches views or applies the answer.
             const attention = root().querySelector('[data-filter="attention"] span');
             attention.textContent = currentResults.filter(needsYou).length;
-            root().querySelector('[data-filter="review"] span').textContent = currentResults.filter((x) => stateOf(x) === 'review').length;
+            root().querySelector('[data-filter="review"] span').textContent = currentResults.filter((x) => isAI(stateOf(x))).length;
             this.summary();
           }));
           editors.push({ getValue, apply, source: r.source });
@@ -526,8 +533,8 @@
         summary: r ? !r.querySelector('.ap-progress')?.hidden : false,
         change: r?.querySelector('.ap-change')?.hidden ? null : changeInfo,
         embedded: embeddedInfo,
-        results: currentResults.map(({ q, source, value, note }) => ({
-          source, value, note,
+        results: currentResults.map(({ q, source, value, note, applied }) => ({
+          source, value, note, applied: !!applied,
           q: q ? { id: q.id, type: q.type, label: q.label, options: q.options, currentValue: q.currentValue,
             meta: { manualFill: q.meta?.manualFill, section: q.meta?.section, optionsPartial: q.meta?.optionsPartial } } : undefined,
         })),
