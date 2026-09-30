@@ -59,9 +59,12 @@
     const rule = hits[0];
     if (rule) {
       if (rule.key === '__resume') return resume && resume.base64 ? { value: '__resume', key: rule.key } : null;
-      const v = profileValue(rule.key, profile);
+      let v = profileValue(rule.key, profile);
       if (!v) return null;
-      if (q.options && q.options.length) {
+      // Location pickers list "City, State, Country": search with the whole place so the right Raipur wins.
+      if (rule.key === 'city' && q.type === 'combobox') v = [v, profile.state, profile.country].filter(Boolean).join(', ');
+      // One page of a server-side search is not the whole list: let the filler search for the value itself.
+      if (q.options && q.options.length && !q.meta?.optionsPartial) {
         const opts = q.options.map((o) => ({ label: o, value: o }));
         const opt = JAF.rangeOption(v, opts) || JAF.bestOption(v, opts);
         return opt ? { value: opt.label, key: rule.key } : null;

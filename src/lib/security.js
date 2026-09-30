@@ -4,7 +4,7 @@ globalThis.FormoraSecurity = Object.freeze({
   maxText: 60000,
   maxQuestions: 150,
   manualQuestion(q) {
-    return /\b(agree|consent|confirm|certify|attest|declaration|authorization|authorisation|authori[sz]ed|eligib\w*|sponsor\w*|visa|citizen\w*|veteran|disabil\w*|ethnic\w*|race|gender|religion|criminal|background check|relocat\w*|willing to)\b/i.test(q.label || '');
+    return /\b(agree|consent|confirm|certify|attest|declaration|authorization|authorisation|authori[sz]ed|eligib\w*|sponsor\w*|visa|citizen\w*|veteran|disabil\w*|ethnic\w*|race|gender|religion|criminal|background check|relocat\w*|willing to|opt[- ]?in|subscribe)\b/i.test(q.label || '');
   },
   safeUrl(value) {
     try { const u = new URL(value); return /^https?:$/.test(u.protocol) ? u.origin : ''; } catch { return ''; }

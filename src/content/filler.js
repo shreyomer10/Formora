@@ -199,6 +199,8 @@
 
   // ---- dropdowns -----------------------------------------------------------
   const OPTION_SEL = '[role="option"], [role="menuitem"], [role="menuitemradio"], [role="listbox"] li, [role="listbox"] > div, [data-automation-id="promptOption"], [data-automation-id="menuItem"], [data-automation-id="promptLeafNode"]';
+  const TYPEAHEAD_SEL = '[data-automation-id*="search" i], [data-automation-id*="select" i], [data-uxi-widget-type*="select" i], [data-automation-id*="prompt" i], [class*="typeahead" i], [class*="autocomplete" i], [class*="react-select" i], [class*="select__" i]';
+  const NO_RESULTS = /^(no options|no results( found)?|no items\.?|no matches( found)?|nothing found|no records found|no data)\.?$/i;
   const PLACEHOLDER_RE = /^(select|choose|please select|no options|no results|no items|no matches|nothing found|loading|searching|search|type to search|start typing|partial list|show (all|more)|view all|see all|more results|all$|--+|-)/i;
 
   function inOverlay(el) {
@@ -209,11 +211,13 @@
     return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.getAttribute('role') === 'textbox';
   }
 
-  const MANUAL_TYPEAHEAD = 'Searchable dropdown autofill is temporarily disabled. Please search and select the value manually on the form.';
+  const MANUAL_MULTI = 'Multi-select fields like skills are left for you. Pick the ones you want on the form.';
 
+  // Searchable single-choice dropdowns are searched and matched strictly (see fillSearchable).
+  // Multi-value ones (skills, tags) are the user's call: adding the wrong chip is worse than none.
   JAF.manualFillReason = function (q) {
     const entry = JAF.registry.get(q.id);
-    return q.type === 'combobox' && entry?.el && isTypable(entry.el) ? MANUAL_TYPEAHEAD : '';
+    return q.type === 'combobox' && entry?.el && isTypable(entry.el) && q.meta?.multi ? MANUAL_MULTI : '';
   };
 
   // Option elements currently visible for this control: its aria-controls/aria-owns
@@ -289,7 +293,8 @@
           entry.options = opts.map((o) => ({ label: o.label, value: o.value }));
           entry.discovered = true;
           q.options = opts.slice(0, 300).map((o) => o.label);
-          if (opts.length > 300) q.meta = { ...(q.meta || {}), optionsPartial: true };
+          // A searchable list that opens with many entries is usually one page of a server search.
+          if (opts.length > 300 || (isTypable(el) && opts.length >= 20)) q.meta = { ...(q.meta || {}), optionsPartial: true };
           found++;
         }
       } catch (e) {
@@ -299,10 +304,96 @@
     return found;
   };
 
-  // Search inputs require site-specific selection verification. Keep button
-  // dropdowns working, but leave searchable controls entirely to the user.
-  async function fillDropdown(entry, el, value) {
-    if (isTypable(el)) return { ok: false, manual: true, note: MANUAL_TYPEAHEAD };
+  // Does the widget now display the chosen option? Look at the input, then at each wrapper up to the
+  // one that would also hold another field. Widgets may show part of the label ("+91" for "India +91").
+  function showsChoice(el, label) {
+    const want = String(label).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const fits = (t) => {
+      t = String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      return !!t && !PLACEHOLDER_RE.test(t) && (t.includes(want.slice(0, 16)) || want.includes(t));
+    };
+    if (isTypable(el) && fits(el.value)) return true;
+    let node = el.parentElement;
+    for (let d = 0; node && d < 5; d++, node = node.parentElement) {
+      if (Array.from(node.querySelectorAll('input, select, textarea')).some((c) => c !== el && c.type !== 'hidden')) break;
+      if (fits(JAF.text(node))) return true;
+    }
+    return false;
+  }
+
+  function noResultsShown() {
+    return Array.from(document.querySelectorAll('[class*="notice" i], [class*="no-option" i], [class*="empty" i], [role="listbox"] > *, [class*="menu" i] > *'))
+      .some((n) => NO_RESULTS.test(JAF.text(n).trim()) && JAF.isVisible(n));
+  }
+
+  // Enter is safe to send when it cannot submit a form: no <form> ancestor, or the input is a widget.
+  function enterIsSafe(el) {
+    return !el.form || el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-autocomplete') || !!el.closest(TYPEAHEAD_SEL);
+  }
+
+  // Phrasings to search for, most specific first: the value, its expansion ("B.Tech" ->
+  // "Bachelor of Technology"), its parts ("Data Science and AI" -> "Data Science"), its degree level.
+  function searchQueries(value) {
+    const out = [value, JAF.aliasOf(value)];
+    out.push(...String(value).split(/\s*(?:,|;|\/|\(|\)|&|\band\b|\s-\s)\s*/i));
+    const level = JAF.degreeLevel(value);
+    if (level) out.push(level.replace(/^./, (c) => c.toUpperCase()));
+    const seen = new Set();
+    return out.map((q) => String(q || '').trim()).filter((q) => q.length >= 2 && !seen.has(q.toLowerCase()) && seen.add(q.toLowerCase())).slice(0, 5);
+  }
+
+  // Wait for the options a query produces (server searches take a moment) and return a strict match.
+  async function matchAfter(el, value, ms) {
+    const start = Date.now();
+    let enterSent = false;
+    for (;;) {
+      await JAF.sleep(180);
+      const opts = toOptions(visibleOptionEls(el).filter((o) => o.isConnected));
+      const pick = JAF.closestOption(value, opts);
+      if (pick) return pick;
+      const elapsed = Date.now() - start;
+      // Sites like Workday only search on Enter. Only press it while no list is showing,
+      // so it cannot choose an option that happens to be highlighted.
+      if (!opts.length && !enterSent && elapsed > 900 && !noResultsShown() && enterIsSafe(el)) { key(el, 'Enter', 'Enter', 13); enterSent = true; }
+      if (elapsed >= ms || (elapsed > 1000 && noResultsShown())) return null;
+    }
+  }
+
+  // Searchable single-choice dropdown (react-select, Workday prompts, Greenhouse school/discipline):
+  // type a few phrasings, pick only an option that is clearly the same thing, and confirm the
+  // widget shows it. Anything uncertain is left empty for the user.
+  async function fillSearchable(entry, el, value) {
+    const target = String(value ?? '').trim();
+    if (!target) return { ok: false, note: 'nothing to search for' };
+    openDropdown(el);
+    let pick = await matchAfter(el, target, 500); // short static lists (Yes/No, months) show on open
+    for (const query of pick ? [] : searchQueries(target)) {
+      typeInto(el, '');
+      typeInto(el, query);
+      pick = await matchAfter(el, target, 2500);
+      if (pick) break;
+    }
+    const reset = () => { if (el.value) typeInto(el, ''); el.blur(); fire(el, ['blur', 'focusout']); };
+    if (!pick) { reset(); await JAF.sleep(80); return { ok: false, note: `"${target}" is not in this list. Pick the closest option on the form.` }; }
+    click(pick.el);
+    await JAF.sleep(300);
+    const menuGone = !pick.el.isConnected || !JAF.isVisible(pick.el);
+    if (menuGone && showsChoice(el, pick.label)) {
+      el.blur(); fire(el, ['blur', 'focusout']);
+      const letters = (t) => String(t).toLowerCase().replace(/[^a-z]+/g, ' ').trim();
+      const exact = letters(pick.label) === letters(target); // "India +91" is India; "Data Science" is not "Data Science and AI"
+      return { ok: true, note: exact ? `picked "${pick.label}"` : `picked "${pick.label}", the closest option to "${target}". Check it.` };
+    }
+    reset();
+    return { ok: false, note: `Could not confirm "${pick.label}" was selected. Pick it on the form.` };
+  }
+
+  async function fillDropdown(entry, el, value, q) {
+    if (isTypable(el)) {
+      const values = Array.isArray(value) ? value.filter(Boolean) : [value];
+      if (q?.meta?.multi || values.length > 1) return { ok: false, manual: true, note: MANUAL_MULTI };
+      return await fillSearchable(entry, el, values[0]);
+    }
     value = Array.isArray(value) ? value[0] : value;
     const known = entry.options?.length
       ? JAF.bestOption(value, entry.options) || JAF.rangeOption(value, entry.options) : null;
