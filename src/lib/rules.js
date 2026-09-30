@@ -44,7 +44,7 @@ window.JAF.RULES = [
   { key: 'skills',         test: /\b(skills?|technologies|tech stack|key skills|core competenc)\b/, types: ['text', 'textarea', 'combobox'] },
 
   // Education
-  { key: 'college',        test: /^(?!.*\b(roll|enrol|registration|reg\.? ?no|student ?id|college ?id|admission)).*\b(college|university|institute|school name|institution|alma mater)\b/, types: ['text', 'combobox'] },
+  { key: 'college',        test: /^(?!.*\b(roll|enrol|registration|reg\.? ?no|student ?id|college ?id|admission)).*\b(college|university|institute|school name|institution|alma mater)\b|^school\b(?! (year|board|percentage|marks|grade))/, types: ['text', 'combobox'] },
   { key: 'degree',         test: /\b(degree|qualification|highest education|education level)\b/, types: ['text', 'select', 'combobox', 'radio'] },
   { key: 'branch',         test: /\b(branch|major|specialization|specialisation|field of study|stream|discipline)\b/, types: ['text', 'select', 'combobox'] },
   { key: 'graduationYear', test: /\b(graduation year|year of (graduation|passing|completion)|passing year|batch|graduating in)\b/, types: ['text', 'number', 'select', 'combobox'] },

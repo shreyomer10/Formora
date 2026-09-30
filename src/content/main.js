@@ -38,8 +38,24 @@
     return profile[key] || '';
   }
 
+  // Greenhouse's education block: "Start date year", "End date month" (ids start-year--0, end-month--0).
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  function eduDatePart(q, profile) {
+    const m = String(q.label || '').toLowerCase().match(/^(start|end)\s+date\s+(month|year)\b/);
+    if (!m) return null;
+    const idx = String(q.meta?.idAttr || '').match(/^(start|end)-(month|year)--(\d+)$/);
+    if (!idx && !/educat/i.test(q.meta?.section || '')) return null;
+    const edu = Array.isArray(profile.education) && profile.education[idx ? +idx[3] : 0];
+    const date = edu && JAF.parseDate(m[1] === 'start' ? edu.startDate : edu.endDate);
+    if (!date) return null;
+    const value = m[2] === 'year' ? date.y : date.m ? MONTHS[+date.m - 1] : '';
+    return value ? { value, key: `education.${m[1]}Date` } : null;
+  }
+
   // Deterministic pass. Returns {value, key} or null.
   function matchRule(q, profile, resume) {
+    const edu = eduDatePart(q, profile);
+    if (edu) return edu;
     const h = haystack(q);
     const type = q.type;
     const labelOnly = String(q.label || '').toLowerCase();
